@@ -174,25 +174,25 @@ v0.6-C04
 feat(config): add local/BYOK config scaffold
 ```
 
-Previous public visitor milestone:
+Previous completed milestones:
+
+- v0.6-C01: public repo strategy.
+- v0.6-C02: README / quickstart / install promise.
+- v0.6-C03: public template manifests.
+
+Next Atlas PR:
 
 ```text
-v0.6-C02
-feat(launcher): add README, quickstart and install promise
-```
-
-Next Atlas PR after C03:
-
-```text
-v0.6-C04
-feat(config): add local/BYOK config placeholder
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
 Expected future sequence:
 
-- C03: public Capsule template manifests after sanitization.
-- C04, if Atlas scopes it: local/BYOK configuration scaffold without committed keys.
-- Later approved PRs: download packaging boundaries, installer documentation and Cloud handoff refinement.
+- C05: launch assets.
+- C06: web download / launcher CTA surface.
+- C07: shareable template pages.
+- C08: referral / powered-by loop.
 
 ## Contribution boundary
 
@@ -203,10 +203,3 @@ Do not add private runtime code, customer material, secrets, binary assets, inst
 ## Operating rule
 
 Private core remains private. Launcher distributes, documents and guides. Runtime decides. Web renders. Dani approves.
-
-## Next Atlas PR
-
-```text
-v0.6-C05
-docs(launch): add Product Hunt, GitHub and X launch assets
-```

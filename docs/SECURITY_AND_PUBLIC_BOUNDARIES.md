@@ -45,7 +45,7 @@ Do not place private core, customer data, secrets, proprietary runtime logic or 
 - private runtime bundled;
 - enabled live connector execution;
 - configured provider execution;
-- No local capsule execution enabled.
+- local capsule execution enabled;
 
 ## Sensitive future work
 

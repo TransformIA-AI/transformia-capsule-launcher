@@ -72,6 +72,10 @@ C04 validation covers:
 
 Review feedback addressed: C04 forbidden-claim detection now catches natural provider readiness claims such as provider is configured, provider execution is configured, provider configuration is active and provider setup is complete, while preserving same-line negation boundaries.
 
+Review feedback addressed: README roadmap now makes C05 the next Atlas PR after C04 and removes stale C03→C04 next-step wording.
+
+Review feedback addressed: forbidden local-execution wording now uses the positive overclaim form, so safe negated boundary language is not inverted.
+
 ## Known P1/P2 learnings applied
 
 - `.env.example` is allowed but real `.env` files remain forbidden.
