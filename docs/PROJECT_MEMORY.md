@@ -29,8 +29,8 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Next Atlas PR
 
 ```text
-v0.6-C03
-feat(templates): add public Capsule template manifests
+v0.6-C04
+feat(config): add local/BYOK config placeholder
 ```
 
 ## Strategic interpretation
@@ -45,7 +45,7 @@ Do not leak private runtime internals into this public repo.
 
 Do not imply production readiness before the installer/download path exists.
 
-Do not implement cloud, Stripe, auth, DB, telemetry, connector execution or live automation in C02.
+Do not implement cloud, Stripe, auth, DB, telemetry, connector execution or live automation in C03.
 
 
 ## License posture
@@ -72,3 +72,11 @@ Default rule: all rights reserved except limited evaluation/contribution rights 
 - No installer, binary or private runtime exists in this repository yet.
 - P1/P2 learnings are embedded into validators: tracked text scanning, matching-line-only negation, PR-base changed-file detection and license/IP posture protection.
 - Next C03 should add public Capsule template manifests without private runtime material, customer data, secrets or live connector execution.
+
+## v0.6-C03 memory
+
+- C03 adds a public Capsule template manifest catalog only.
+- The five manifests are non-executable, public-safe previews for future launcher/template picker surfaces.
+- Private core remains private: no private runtime code, connector execution, customer data, secrets, prompts, raw evidence, payment, telemetry or regulated advice belongs in the manifests.
+- C03 keeps source-available/IP posture unchanged.
+- Next C04 introduces a local/BYOK config placeholder if Atlas agrees.

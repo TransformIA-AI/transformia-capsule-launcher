@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "transformia-capsule-template-manifest.v0.6-c03",
+  "templateId": "tpl_lead_intake_capsule",
+  "slug": "lead-intake-capsule",
+  "displayName": "Lead Intake Capsule",
+  "status": "public_manifest_only",
+  "category": "lead_intake",
+  "targetUser": "Founder, operator or service team reviewing inbound interest manually.",
+  "businessJob": "Structure inbound interest into a reviewable intake before any human follow-up decision.",
+  "valueHypothesis": "A future Capsule could make lead review clearer by separating public-safe context, unanswered questions and human next steps.",
+  "day1UserBenefit": "A visitor sees how a Capsule could turn leads into reviewable work without forms, CRM sync, email send or WhatsApp actions.",
+  "inputs": {
+    "publicSafeExamples": [
+      "Generic business interest summary",
+      "Public-safe source label such as website contact or event conversation",
+      "Conceptual qualification notes with no personal identifiers"
+    ],
+    "forbiddenData": [
+      "No customer data or PII",
+      "No email, phone, DNI, customerId or tenantId",
+      "No API key, provider key or connector payload",
+      "No prompt text, raw evidence or private runtime path",
+      "No payment or subscription ID"
+    ]
+  },
+  "outputs": {
+    "publicSafeOutputs": [
+      "Reviewable intake outline",
+      "Human decision checklist",
+      "Open questions for later review"
+    ],
+    "nonGoals": [
+      "No runnable form flow",
+      "No CRM integration",
+      "No email send",
+      "No WhatsApp send",
+      "No connector execution",
+      "No regulated advice",
+      "No ROI guarantee"
+    ]
+  },
+  "runtimeBoundary": "No private runtime is included; this manifest is not executable and cannot authorize or perform work.",
+  "connectorBoundary": "No connector execution is included; CRM, email and messaging systems remain outside C03.",
+  "dataBoundary": "No secrets, no customer data, no telemetry, no PII, no prompt text, no raw evidence and no connector payloads are included.",
+  "complianceBoundary": "No regulated advice, legal audit proof, compliance certification or ROI guarantee is provided.",
+  "ipBoundary": "This public manifest preserves the source-available launcher posture and does not expose private runtime code.",
+  "cloudHandoffBoundary": "Future Cloud handoff would require separate approved implementation and review before any hosted behavior exists.",
+  "localByokBoundary": "Future local/BYOK setup would require separate configuration work; no API keys are requested here.",
+  "safetyFlags": {
+    "noPrivateRuntime": true,
+    "noConnectorExecution": true,
+    "noCustomerData": true,
+    "noSecrets": true,
+    "noRegulatedAdvice": true,
+    "noPayment": true,
+    "noTelemetry": true,
+    "manifestOnly": true
+  },
+  "futureImplementationNotes": [
+    "A future implementation would require private runtime review semantics outside this public manifest.",
+    "A future implementation would require approved connector and data boundaries before any live action exists.",
+    "C03 ships manifest only, not executable template behavior."
+  ],
+  "publicSafe": true
+}

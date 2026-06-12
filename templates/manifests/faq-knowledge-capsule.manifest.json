@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "transformia-capsule-template-manifest.v0.6-c03",
+  "templateId": "tpl_faq_knowledge_capsule",
+  "slug": "faq-knowledge-capsule",
+  "displayName": "FAQ Knowledge Capsule",
+  "status": "public_manifest_only",
+  "category": "knowledge_faq",
+  "targetUser": "Founder, support lead or knowledge owner reviewing public FAQ material.",
+  "businessJob": "Turn public FAQ and knowledge snippets into a reviewable answer surface for later human approval.",
+  "valueHypothesis": "A future Capsule could help teams organize public knowledge into consistent review notes without exposing private prompts or data.",
+  "day1UserBenefit": "A visitor sees how a Capsule could structure public FAQ snippets without provider calls, a live chatbot or regulated advice.",
+  "inputs": {
+    "publicSafeExamples": [
+      "Public FAQ heading",
+      "Public-safe help article excerpt summary",
+      "Generic audience question with no personal identifiers"
+    ],
+    "forbiddenData": [
+      "No customer data or PII",
+      "No email, phone, DNI, customerId or tenantId",
+      "No provider key, API key or connector payload",
+      "No prompt text, raw evidence or private runtime path",
+      "No payment or subscription ID"
+    ]
+  },
+  "outputs": {
+    "publicSafeOutputs": [
+      "FAQ answer outline",
+      "Knowledge gap list",
+      "Human review checklist"
+    ],
+    "nonGoals": [
+      "No provider calls",
+      "No live chatbot",
+      "No connector execution",
+      "No regulated advice",
+      "No compliance certification",
+      "No ROI guarantee"
+    ]
+  },
+  "runtimeBoundary": "No private runtime is included; this manifest is not executable and does not answer users directly.",
+  "connectorBoundary": "No connector execution is included; provider calls, chat surfaces and knowledge systems remain outside C03.",
+  "dataBoundary": "No secrets, no customer data, no telemetry, no PII, no prompt text, no raw evidence and no connector payloads are included.",
+  "complianceBoundary": "No regulated advice, compliance certification, legal audit proof or ROI guarantee is provided.",
+  "ipBoundary": "This public manifest preserves the source-available launcher posture and does not expose private runtime code.",
+  "cloudHandoffBoundary": "Future Cloud handoff would require separate approved implementation and review before any hosted behavior exists.",
+  "localByokBoundary": "Future local/BYOK setup would require separate configuration work; no API keys are requested here.",
+  "safetyFlags": {
+    "noPrivateRuntime": true,
+    "noConnectorExecution": true,
+    "noCustomerData": true,
+    "noSecrets": true,
+    "noRegulatedAdvice": true,
+    "noPayment": true,
+    "noTelemetry": true,
+    "manifestOnly": true
+  },
+  "futureImplementationNotes": [
+    "A future implementation would require private runtime review semantics outside this public manifest.",
+    "A future implementation would require approved provider and data boundaries before any live answer surface exists.",
+    "C03 ships manifest only, not executable template behavior."
+  ],
+  "publicSafe": true
+}
