@@ -1,22 +1,26 @@
-# Public Templates Placeholder
+# Public Templates
 
-Public templates will live here in a later PR.
+Public Capsule template manifests now live in [`templates/manifests`](manifests/).
 
-C01 does not add real templates.
+C03 adds a manifest catalog only. The manifest files are public-safe, generic and descriptive previews of future Capsule template directions.
 
-Do not place here:
+Current boundary:
 
-- customer data;
-- private runtime templates;
-- secrets;
-- raw evidence;
-- raw connector payloads;
-- regulated workflow claims;
-- live connector execution logic;
-- PII;
-- API keys;
-- production connector credentials;
-- private prompts;
-- internal runbooks.
+- no executable templates yet;
+- no customer data;
+- no secrets;
+- no private runtime;
+- no connector execution;
+- no prompts;
+- no raw evidence;
+- no payment behavior;
+- no telemetry;
+- no regulated advice.
 
-Templates must be sanitized and generic. They must be safe to read publicly, safe to fork for evaluation and separate from private runtime implementation.
+Do not place customer capsules, private runtime templates, n8n workflows, connector payloads, prompt files, API keys, provider keys, `.env` files or internal runbooks here.
+
+See:
+
+- [`templates/manifests/README.md`](manifests/README.md)
+- [`docs/TEMPLATE_MANIFEST_CATALOG.md`](../docs/TEMPLATE_MANIFEST_CATALOG.md)
+- [`docs/TEMPLATE_SAFETY_REVIEW_CHECKLIST.md`](../docs/TEMPLATE_SAFETY_REVIEW_CHECKLIST.md)

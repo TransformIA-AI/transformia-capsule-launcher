@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "transformia-capsule-template-manifest.v0.6-c03",
+  "templateId": "tpl_local_byok_starter_capsule",
+  "slug": "local-byok-starter-capsule",
+  "displayName": "Local BYOK Starter Capsule",
+  "status": "public_manifest_only",
+  "category": "local_byok_starter",
+  "targetUser": "Technical evaluator planning a future local/BYOK setup with explicit secret boundaries.",
+  "businessJob": "Explain the future local/BYOK setup path before any provider configuration or secret handling exists.",
+  "valueHypothesis": "A future Capsule could help evaluators understand what setup decisions are needed while keeping keys and providers outside the public repo.",
+  "day1UserBenefit": "A visitor sees the future local/BYOK direction without API keys requested, .env creation or provider configuration.",
+  "inputs": {
+    "publicSafeExamples": [
+      "Generic local setup goal",
+      "Public-safe provider choice placeholder",
+      "Conceptual security preference with no secret values"
+    ],
+    "forbiddenData": [
+      "No customer data or PII",
+      "No email, phone, DNI, customerId or tenantId",
+      "No API key, provider key or connector payload",
+      "No prompt text, raw evidence or private runtime path",
+      "No payment or subscription ID"
+    ]
+  },
+  "outputs": {
+    "publicSafeOutputs": [
+      "Local/BYOK readiness checklist",
+      "Secret-handling reminder",
+      "Future configuration questions"
+    ],
+    "nonGoals": [
+      "No API keys requested",
+      "No .env file created",
+      "No provider configuration",
+      "No connector execution",
+      "No payment",
+      "No telemetry"
+    ]
+  },
+  "runtimeBoundary": "No private runtime is included; this manifest is not executable and does not configure providers.",
+  "connectorBoundary": "No connector execution is included; provider and connector setup remain outside C03.",
+  "dataBoundary": "No secrets, no customer data, no telemetry, no PII, no prompt text, no raw evidence and no connector payloads are included.",
+  "complianceBoundary": "No regulated advice, compliance certification, legal audit proof or ROI guarantee is provided.",
+  "ipBoundary": "This public manifest preserves the source-available launcher posture and does not expose private runtime code.",
+  "cloudHandoffBoundary": "Future Cloud handoff would require separate approved implementation and review before any hosted behavior exists.",
+  "localByokBoundary": "Future local/BYOK setup requires a later approved config placeholder; no API keys or provider settings are requested here.",
+  "safetyFlags": {
+    "noPrivateRuntime": true,
+    "noConnectorExecution": true,
+    "noCustomerData": true,
+    "noSecrets": true,
+    "noRegulatedAdvice": true,
+    "noPayment": true,
+    "noTelemetry": true,
+    "manifestOnly": true
+  },
+  "futureImplementationNotes": [
+    "A future implementation would require separate local/BYOK configuration boundaries outside this public manifest.",
+    "A future implementation would require approved secret handling before any provider setup exists.",
+    "C03 ships manifest only, not executable template behavior."
+  ],
+  "publicSafe": true
+}

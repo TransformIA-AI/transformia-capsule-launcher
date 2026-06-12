@@ -9,15 +9,15 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Current PR
 
 ```text
-v0.6-C02
-feat(launcher): add README, quickstart and install promise
-```
-
-## Next PR after C02
-
-```text
 v0.6-C03
 feat(templates): add public Capsule template manifests
+```
+
+## Next PR after C03
+
+```text
+v0.6-C04
+feat(config): add local/BYOK config placeholder
 ```
 
 ## C01 meaning
@@ -89,3 +89,25 @@ C02 upgrades the repository from strategy-only to day-1 public visitor readiness
 v0.6-C01
 docs(launcher): define Capsule Launcher public repo strategy
 ```
+
+
+## C03 meaning
+
+C03 adds public-safe Capsule template manifests so first visitors can understand planned template categories, business jobs, conceptual input boundaries and future implementation requirements.
+
+## C03 does not mean
+
+- no executable launcher;
+- no installer;
+- no binaries;
+- no private runtime code;
+- no runnable templates;
+- no connector execution;
+- no customer data;
+- no secrets;
+- no payment implementation;
+- no Stripe;
+- no auth;
+- no database;
+- no cloud sync;
+- no telemetry.

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "transformia-capsule-template-manifest.v0.6-c03",
+  "templateId": "tpl_evidence_value_review_capsule",
+  "slug": "evidence-value-review-capsule",
+  "displayName": "Evidence Value Review Capsule",
+  "status": "public_manifest_only",
+  "category": "evidence_value_review",
+  "targetUser": "Operator, consultant or founder summarizing work evidence for human review.",
+  "businessJob": "Show how work evidence could become a value and review summary without storing raw evidence here.",
+  "valueHypothesis": "A future Capsule could help connect work artifacts to reviewable value claims while preserving human approval and evidence boundaries.",
+  "day1UserBenefit": "A visitor sees how a Capsule could explain value review structure without raw evidence, legal audit proof or compliance certification.",
+  "inputs": {
+    "publicSafeExamples": [
+      "Generic work milestone label",
+      "Public-safe outcome summary",
+      "Conceptual evidence category with no raw evidence"
+    ],
+    "forbiddenData": [
+      "No customer data or PII",
+      "No email, phone, DNI, customerId or tenantId",
+      "No connector payload, API key or provider key",
+      "No prompt text, raw evidence or private runtime path",
+      "No payment or subscription ID"
+    ]
+  },
+  "outputs": {
+    "publicSafeOutputs": [
+      "Value review summary outline",
+      "Evidence category checklist",
+      "Human approval notes"
+    ],
+    "nonGoals": [
+      "No raw evidence storage",
+      "No legal audit proof",
+      "No compliance certification",
+      "No connector execution",
+      "No regulated advice",
+      "No ROI guarantee"
+    ]
+  },
+  "runtimeBoundary": "No private runtime is included; this manifest is not executable and does not validate evidence.",
+  "connectorBoundary": "No connector execution is included; evidence systems and file sources remain outside C03.",
+  "dataBoundary": "No secrets, no customer data, no telemetry, no PII, no prompt text, no raw evidence and no connector payloads are included.",
+  "complianceBoundary": "No regulated advice, compliance certification, legal audit proof or ROI guarantee is provided.",
+  "ipBoundary": "This public manifest preserves the source-available launcher posture and does not expose private runtime code.",
+  "cloudHandoffBoundary": "Future Cloud handoff would require separate approved implementation and review before any hosted behavior exists.",
+  "localByokBoundary": "Future local/BYOK setup would require separate configuration work; no API keys are requested here.",
+  "safetyFlags": {
+    "noPrivateRuntime": true,
+    "noConnectorExecution": true,
+    "noCustomerData": true,
+    "noSecrets": true,
+    "noRegulatedAdvice": true,
+    "noPayment": true,
+    "noTelemetry": true,
+    "manifestOnly": true
+  },
+  "futureImplementationNotes": [
+    "A future implementation would require private runtime review semantics outside this public manifest.",
+    "A future implementation would require approved evidence and data boundaries before any live review exists.",
+    "C03 ships manifest only, not executable template behavior."
+  ],
+  "publicSafe": true
+}

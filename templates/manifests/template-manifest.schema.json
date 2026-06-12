@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transformia.ai/schemas/capsule-template-manifest.v0.6-c03.schema.json",
+  "title": "TransformIA Capsule Template Manifest v0.6-C03",
+  "description": "Public-safe, non-executable manifest contract for future TransformIA Capsule template previews.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "templateId",
+    "slug",
+    "displayName",
+    "status",
+    "category",
+    "targetUser",
+    "businessJob",
+    "valueHypothesis",
+    "day1UserBenefit",
+    "inputs",
+    "outputs",
+    "runtimeBoundary",
+    "connectorBoundary",
+    "dataBoundary",
+    "complianceBoundary",
+    "ipBoundary",
+    "cloudHandoffBoundary",
+    "localByokBoundary",
+    "safetyFlags",
+    "futureImplementationNotes",
+    "publicSafe"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "transformia-capsule-template-manifest.v0.6-c03"
+    },
+    "templateId": {
+      "type": "string",
+      "pattern": "^tpl_[a-z0-9_]+$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 3
+    },
+    "status": {
+      "enum": ["public_manifest_only", "planned_template"]
+    },
+    "category": {
+      "enum": [
+        "lead_intake",
+        "appointment_prep",
+        "knowledge_faq",
+        "evidence_value_review",
+        "local_byok_starter"
+      ]
+    },
+    "targetUser": {
+      "type": "string",
+      "minLength": 8
+    },
+    "businessJob": {
+      "type": "string",
+      "minLength": 12
+    },
+    "valueHypothesis": {
+      "type": "string",
+      "minLength": 12
+    },
+    "day1UserBenefit": {
+      "type": "string",
+      "minLength": 12
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicSafeExamples", "forbiddenData"],
+      "properties": {
+        "publicSafeExamples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "forbiddenData": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicSafeOutputs", "nonGoals"],
+      "properties": {
+        "publicSafeOutputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "nonGoals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "runtimeBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "connectorBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "dataBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "complianceBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "ipBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "cloudHandoffBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "localByokBoundary": {
+      "type": "string",
+      "minLength": 12
+    },
+    "safetyFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noPrivateRuntime",
+        "noConnectorExecution",
+        "noCustomerData",
+        "noSecrets",
+        "noRegulatedAdvice",
+        "noPayment",
+        "noTelemetry",
+        "manifestOnly"
+      ],
+      "properties": {
+        "noPrivateRuntime": { "const": true },
+        "noConnectorExecution": { "const": true },
+        "noCustomerData": { "const": true },
+        "noSecrets": { "const": true },
+        "noRegulatedAdvice": { "const": true },
+        "noPayment": { "const": true },
+        "noTelemetry": { "const": true },
+        "manifestOnly": { "const": true }
+      }
+    },
+    "futureImplementationNotes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "publicSafe": {
+      "const": true
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "transformia-capsule-template-manifest.v0.6-c03",
+  "templateId": "tpl_appointment_prep_capsule",
+  "slug": "appointment-prep-capsule",
+  "displayName": "Appointment Prep Capsule",
+  "status": "public_manifest_only",
+  "category": "appointment_prep",
+  "targetUser": "Consultant, clinic operator or service owner preparing for a human-led meeting.",
+  "businessJob": "Prepare an agenda and checklist before a human meeting so the reviewer can arrive with clear context.",
+  "valueHypothesis": "A future Capsule could reduce meeting preparation friction by organizing public-safe notes and decision prompts for human review.",
+  "day1UserBenefit": "A visitor sees how a Capsule could prepare a meeting checklist without calendar connector access, invites or automated booking.",
+  "inputs": {
+    "publicSafeExamples": [
+      "Generic meeting objective",
+      "Public-safe topic list",
+      "Conceptual preparation notes with no personal identifiers"
+    ],
+    "forbiddenData": [
+      "No customer data or PII",
+      "No email, phone, DNI, customerId or tenantId",
+      "No calendar payload, API key or provider key",
+      "No prompt text, raw evidence or private runtime path",
+      "No payment or subscription ID"
+    ]
+  },
+  "outputs": {
+    "publicSafeOutputs": [
+      "Agenda outline",
+      "Preparation checklist",
+      "Human review questions"
+    ],
+    "nonGoals": [
+      "No calendar connector",
+      "No invite sending",
+      "No automated booking",
+      "No connector execution",
+      "No regulated advice",
+      "No ROI guarantee"
+    ]
+  },
+  "runtimeBoundary": "No private runtime is included; this manifest is not executable and does not schedule or authorize work.",
+  "connectorBoundary": "No connector execution is included; calendar, email and booking systems remain outside C03.",
+  "dataBoundary": "No secrets, no customer data, no telemetry, no PII, no prompt text, no raw evidence and no connector payloads are included.",
+  "complianceBoundary": "No regulated advice, compliance certification, legal audit proof or ROI guarantee is provided.",
+  "ipBoundary": "This public manifest preserves the source-available launcher posture and does not expose private runtime code.",
+  "cloudHandoffBoundary": "Future Cloud handoff would require separate approved implementation and review before any hosted behavior exists.",
+  "localByokBoundary": "Future local/BYOK setup would require separate configuration work; no API keys are requested here.",
+  "safetyFlags": {
+    "noPrivateRuntime": true,
+    "noConnectorExecution": true,
+    "noCustomerData": true,
+    "noSecrets": true,
+    "noRegulatedAdvice": true,
+    "noPayment": true,
+    "noTelemetry": true,
+    "manifestOnly": true
+  },
+  "futureImplementationNotes": [
+    "A future implementation would require private runtime review semantics outside this public manifest.",
+    "A future implementation would require approved calendar and data boundaries before any live action exists.",
+    "C03 ships manifest only, not executable template behavior."
+  ],
+  "publicSafe": true
+}

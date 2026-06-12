@@ -4,7 +4,7 @@
 
 This document defines what public templates may and may not be in TransformIA Capsule Launcher.
 
-C01 only defines the template boundary. It does not add real templates.
+C01 only defines the template boundary. C03 adds public manifest files only; it does not add executable templates.
 
 ## Template posture
 
@@ -29,12 +29,12 @@ Public templates must contain:
 - no internal runbooks;
 - no internal paths.
 
-## Future C03
+## C03 manifest catalog
 
-A future C03 PR may add public template examples after sanitization and review.
+C03 adds public-safe manifests under `templates/manifests/` and documents them in `docs/TEMPLATE_MANIFEST_CATALOG.md`.
 
-Those examples must remain generic, public-safe and detached from customer material and private runtime implementation.
+Those manifests remain generic, public-safe, non-executable and detached from customer material, connector payloads and private runtime implementation.
 
-## C01 scope
+## Current scope
 
-C01 defines this boundary only. The current `templates/` directory remains a placeholder.
+The current `templates/` directory contains manifest previews only. It does not contain executable templates, customer capsules, private runtime templates or connector implementations.
