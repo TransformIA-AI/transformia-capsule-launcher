@@ -6,6 +6,32 @@ const root = process.cwd();
 const issues = [];
 
 const schemaVersion = "transformia-capsule-template-manifest.v0.6-c03";
+const requiredTopLevelFields = [
+  "schemaVersion",
+  "templateId",
+  "slug",
+  "displayName",
+  "status",
+  "category",
+  "targetUser",
+  "businessJob",
+  "valueHypothesis",
+  "day1UserBenefit",
+  "inputs",
+  "outputs",
+  "runtimeBoundary",
+  "connectorBoundary",
+  "dataBoundary",
+  "complianceBoundary",
+  "ipBoundary",
+  "cloudHandoffBoundary",
+  "localByokBoundary",
+  "safetyFlags",
+  "futureImplementationNotes",
+  "publicSafe",
+];
+const requiredInputFields = ["publicSafeExamples", "forbiddenData"];
+const requiredOutputFields = ["publicSafeOutputs", "nonGoals"];
 const requiredSafetyFlags = [
   "noPrivateRuntime",
   "noConnectorExecution",
@@ -16,6 +42,13 @@ const requiredSafetyFlags = [
   "noTelemetry",
   "manifestOnly",
 ];
+const allowedCategories = new Set([
+  "lead_intake",
+  "appointment_prep",
+  "knowledge_faq",
+  "evidence_value_review",
+  "local_byok_starter",
+]);
 
 const manifestFiles = [
   "templates/manifests/lead-intake-capsule.manifest.json",
@@ -257,6 +290,257 @@ function hasPositiveForbiddenClaim(text, phrase) {
   });
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function addContractIssue(contractIssues, condition, message) {
+  if (!condition) contractIssues.push(message);
+}
+
+function compareLists(label, actual, expected) {
+  const actualList = Array.isArray(actual) ? actual : [];
+  const missing = expected.filter((field) => !actualList.includes(field));
+  const unexpected = actualList.filter((field) => !expected.includes(field));
+  addIssue(missing.length === 0, `${label} missing expected fields: ${missing.join(", ")}`);
+  addIssue(unexpected.length === 0, `${label} has unvalidated schema-required fields: ${unexpected.join(", ")}`);
+}
+
+function requireString(contractIssues, file, manifest, field, minLength) {
+  const value = manifest?.[field];
+  addContractIssue(contractIssues, typeof value === "string", `${file} field ${field} must be a string`);
+  if (typeof value === "string") {
+    addContractIssue(contractIssues, value.trim().length >= minLength, `${file} field ${field} must be at least ${minLength} characters`);
+  }
+}
+
+function requireStringArray(contractIssues, file, owner, field) {
+  const value = owner?.[field];
+  addContractIssue(contractIssues, Array.isArray(value), `${file} field ${field} must be an array`);
+  if (Array.isArray(value)) {
+    addContractIssue(contractIssues, value.length > 0, `${file} field ${field} must not be empty`);
+    for (const [index, item] of value.entries()) {
+      addContractIssue(
+        contractIssues,
+        typeof item === "string" && item.trim().length > 0,
+        `${file} field ${field}[${index}] must be a non-empty string`,
+      );
+    }
+  }
+}
+
+function assertAllowedProperties(contractIssues, file, objectName, value, allowedFields) {
+  if (!isPlainObject(value)) return;
+  const extra = Object.keys(value).filter((field) => !allowedFields.includes(field));
+  addContractIssue(contractIssues, extra.length === 0, `${file} ${objectName} has unexpected properties: ${extra.join(", ")}`);
+}
+
+function joinedText(value) {
+  if (Array.isArray(value)) return value.join(" ").toLowerCase();
+  if (typeof value === "string") return value.toLowerCase();
+  return "";
+}
+
+function mentions(text, patterns) {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function validateManifestContract(file, manifest) {
+  const contractIssues = [];
+  addContractIssue(contractIssues, isPlainObject(manifest), `${file} manifest must be an object`);
+  if (!isPlainObject(manifest)) return contractIssues;
+
+  for (const field of requiredTopLevelFields) {
+    addContractIssue(contractIssues, Object.hasOwn(manifest, field), `${file} missing required field ${field}`);
+  }
+  assertAllowedProperties(contractIssues, file, "manifest", manifest, requiredTopLevelFields);
+
+  addContractIssue(contractIssues, manifest.schemaVersion === schemaVersion, `${file} schemaVersion must equal ${schemaVersion}`);
+  addContractIssue(
+    contractIssues,
+    typeof manifest.templateId === "string" && /^tpl_[a-z0-9_]+$/.test(manifest.templateId),
+    `${file} templateId must match /^tpl_[a-z0-9_]+$/`,
+  );
+  addContractIssue(
+    contractIssues,
+    typeof manifest.slug === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.slug),
+    `${file} slug must match /^[a-z0-9]+(?:-[a-z0-9]+)*$/`,
+  );
+  requireString(contractIssues, file, manifest, "displayName", 3);
+  addContractIssue(contractIssues, manifest.status === "public_manifest_only", `${file} status must be public_manifest_only`);
+  addContractIssue(contractIssues, allowedCategories.has(manifest.category), `${file} category must be one of the allowed C03 categories`);
+  requireString(contractIssues, file, manifest, "targetUser", 8);
+  requireString(contractIssues, file, manifest, "businessJob", 12);
+  requireString(contractIssues, file, manifest, "valueHypothesis", 12);
+  requireString(contractIssues, file, manifest, "day1UserBenefit", 12);
+
+  addContractIssue(contractIssues, isPlainObject(manifest.inputs), `${file} inputs must be an object`);
+  if (isPlainObject(manifest.inputs)) {
+    for (const field of requiredInputFields) addContractIssue(contractIssues, Object.hasOwn(manifest.inputs, field), `${file} inputs missing required field ${field}`);
+    assertAllowedProperties(contractIssues, file, "inputs", manifest.inputs, requiredInputFields);
+    requireStringArray(contractIssues, file, manifest.inputs, "publicSafeExamples");
+    requireStringArray(contractIssues, file, manifest.inputs, "forbiddenData");
+  }
+
+  addContractIssue(contractIssues, isPlainObject(manifest.outputs), `${file} outputs must be an object`);
+  if (isPlainObject(manifest.outputs)) {
+    for (const field of requiredOutputFields) addContractIssue(contractIssues, Object.hasOwn(manifest.outputs, field), `${file} outputs missing required field ${field}`);
+    assertAllowedProperties(contractIssues, file, "outputs", manifest.outputs, requiredOutputFields);
+    requireStringArray(contractIssues, file, manifest.outputs, "publicSafeOutputs");
+    requireStringArray(contractIssues, file, manifest.outputs, "nonGoals");
+  }
+
+  for (const field of [
+    "runtimeBoundary",
+    "connectorBoundary",
+    "dataBoundary",
+    "complianceBoundary",
+    "ipBoundary",
+    "cloudHandoffBoundary",
+    "localByokBoundary",
+  ]) {
+    requireString(contractIssues, file, manifest, field, 12);
+  }
+
+  addContractIssue(contractIssues, isPlainObject(manifest.safetyFlags), `${file} safetyFlags must be an object`);
+  if (isPlainObject(manifest.safetyFlags)) {
+    for (const flag of requiredSafetyFlags) {
+      addContractIssue(contractIssues, Object.hasOwn(manifest.safetyFlags, flag), `${file} safetyFlags missing required field ${flag}`);
+      addContractIssue(contractIssues, manifest.safetyFlags[flag] === true, `${file} safetyFlags.${flag} must be true`);
+    }
+    assertAllowedProperties(contractIssues, file, "safetyFlags", manifest.safetyFlags, requiredSafetyFlags);
+  }
+
+  requireStringArray(contractIssues, file, manifest, "futureImplementationNotes");
+  addContractIssue(contractIssues, manifest.publicSafe === true, `${file} publicSafe must be true`);
+
+  const forbiddenDataText = joinedText(manifest.inputs?.forbiddenData);
+  const nonGoalsBoundaryText = joinedText([
+    ...(manifest.outputs?.nonGoals || []),
+    manifest.runtimeBoundary,
+    manifest.connectorBoundary,
+    manifest.dataBoundary,
+    manifest.complianceBoundary,
+    ...(manifest.futureImplementationNotes || []),
+  ]);
+  const runtimeText = joinedText(manifest.runtimeBoundary);
+  const connectorText = joinedText(manifest.connectorBoundary);
+  const dataText = joinedText(manifest.dataBoundary);
+  const complianceText = joinedText(manifest.complianceBoundary);
+  const ipText = joinedText(manifest.ipBoundary);
+  const cloudText = joinedText(manifest.cloudHandoffBoundary);
+  const localByokText = joinedText(manifest.localByokBoundary);
+
+  addContractIssue(contractIssues, mentions(forbiddenDataText, [/no customer data/, /customer data/]), `${file} inputs.forbiddenData must reference no customer data`);
+  addContractIssue(contractIssues, mentions(forbiddenDataText, [/no pii/, /personal identifiers?/, /email|phone|dni/]), `${file} inputs.forbiddenData must reference no PII`);
+  addContractIssue(contractIssues, mentions(forbiddenDataText, [/no secrets?/, /api key/, /provider key/]), `${file} inputs.forbiddenData must reference no secrets`);
+  addContractIssue(contractIssues, mentions(forbiddenDataText, [/no (private )?prompts?/, /no prompt text/, /prompt text/]), `${file} inputs.forbiddenData must reference no prompts`);
+  addContractIssue(contractIssues, mentions(forbiddenDataText, [/no connector payloads?/, /connector payload/, /calendar payload/]), `${file} inputs.forbiddenData must reference no connector payloads`);
+
+  addContractIssue(contractIssues, mentions(nonGoalsBoundaryText, [/not executable/, /no execution/, /no live execution/]), `${file} outputs.nonGoals or boundaries must reference not executable or no execution`);
+  addContractIssue(contractIssues, mentions(nonGoalsBoundaryText, [/no connector execution/]), `${file} outputs.nonGoals or boundaries must reference no connector execution`);
+  addContractIssue(contractIssues, mentions(nonGoalsBoundaryText, [/no payment/]) || manifest.safetyFlags?.noPayment === true, `${file} outputs.nonGoals or boundaries must reference no payment`);
+  addContractIssue(contractIssues, mentions(nonGoalsBoundaryText, [/no regulated advice/]), `${file} outputs.nonGoals or boundaries must reference no regulated advice`);
+  addContractIssue(contractIssues, mentions(runtimeText, [/no private runtime/]), `${file} runtimeBoundary must mention no private runtime`);
+  addContractIssue(contractIssues, mentions(connectorText, [/no connector execution/]), `${file} connectorBoundary must mention no connector execution`);
+  addContractIssue(contractIssues, mentions(dataText, [/no customer data/]) && mentions(dataText, [/no secrets?/]), `${file} dataBoundary must mention no customer data and no secrets`);
+  addContractIssue(
+    contractIssues,
+    mentions(complianceText, [/no regulated advice/]) && mentions(complianceText, [/no compliance certification/, /no guarantee/, /roi guarantee/]),
+    `${file} complianceBoundary must mention no regulated advice and no compliance certification or guarantee`,
+  );
+  addContractIssue(contractIssues, mentions(ipText, [/source-available/, /license boundary/]), `${file} ipBoundary must mention source-available or license boundary`);
+  addContractIssue(contractIssues, mentions(cloudText, [/future cloud handoff/, /not implemented/, /future cloud/]), `${file} cloudHandoffBoundary must mention future Cloud handoff or not implemented`);
+  addContractIssue(
+    contractIssues,
+    mentions(localByokText, [/future/, /planned/, /local\/byok/]) && mentions(localByokText, [/no api keys?/, /no keys?/, /not requested/, /no keys committed/]),
+    `${file} localByokBoundary must mention future/planned/local BYOK and no keys committed or requested`,
+  );
+
+  return contractIssues;
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function validSyntheticManifest() {
+  return {
+    schemaVersion,
+    templateId: "tpl_synthetic_manifest",
+    slug: "synthetic-manifest",
+    displayName: "Synthetic Manifest",
+    status: "public_manifest_only",
+    category: "lead_intake",
+    targetUser: "Synthetic reviewer",
+    businessJob: "Validate contract behavior safely.",
+    valueHypothesis: "A synthetic manifest can prove validator behavior without temp files.",
+    day1UserBenefit: "Reviewers can trust required field validation coverage.",
+    inputs: {
+      publicSafeExamples: ["Generic public-safe example"],
+      forbiddenData: ["No PII, no customer data, no secrets, no prompt text and no connector payloads"],
+    },
+    outputs: {
+      publicSafeOutputs: ["Reviewable public-safe output"],
+      nonGoals: ["Not executable, no execution, no connector execution, no payment and no regulated advice"],
+    },
+    runtimeBoundary: "No private runtime is included in this manifest.",
+    connectorBoundary: "No connector execution is included in this manifest.",
+    dataBoundary: "No customer data and no secrets are included.",
+    complianceBoundary: "No regulated advice and no compliance certification or guarantee is provided.",
+    ipBoundary: "The source-available license boundary remains preserved.",
+    cloudHandoffBoundary: "Future Cloud handoff is not implemented here.",
+    localByokBoundary: "Future local/BYOK setup is planned and no API keys are requested.",
+    safetyFlags: {
+      noPrivateRuntime: true,
+      noConnectorExecution: true,
+      noCustomerData: true,
+      noSecrets: true,
+      noRegulatedAdvice: true,
+      noPayment: true,
+      noTelemetry: true,
+      manifestOnly: true,
+    },
+    futureImplementationNotes: ["Future implementation requires approved boundaries."],
+    publicSafe: true,
+  };
+}
+
+function assertManifestContractRegressionChecks() {
+  const base = validSyntheticManifest();
+  addIssue(validateManifestContract("synthetic-valid", base).length === 0, "synthetic valid manifest must pass contract validation");
+
+  const cases = [
+    ["delete businessJob", (manifest) => delete manifest.businessJob],
+    ["delete inputs.forbiddenData", (manifest) => delete manifest.inputs.forbiddenData],
+    ["delete outputs.nonGoals", (manifest) => delete manifest.outputs.nonGoals],
+    ["delete localByokBoundary", (manifest) => delete manifest.localByokBoundary],
+    ["set publicSafe false", (manifest) => { manifest.publicSafe = false; }],
+    ["set safetyFlags.noPayment false", (manifest) => { manifest.safetyFlags.noPayment = false; }],
+    ["add unexpected top-level field", (manifest) => { manifest.unexpected = true; }],
+    ["add unexpected inputs field", (manifest) => { manifest.inputs.unexpected = true; }],
+    ["add unexpected outputs field", (manifest) => { manifest.outputs.unexpected = true; }],
+    ["add unexpected safetyFlags field", (manifest) => { manifest.safetyFlags.unexpected = true; }],
+    ["use invalid templateId", (manifest) => { manifest.templateId = "bad-template"; }],
+    ["use invalid slug", (manifest) => { manifest.slug = "Bad_Slug"; }],
+    ["use empty futureImplementationNotes", (manifest) => { manifest.futureImplementationNotes = []; }],
+  ];
+
+  for (const [name, mutate] of cases) {
+    const candidate = cloneJson(base);
+    mutate(candidate);
+    addIssue(validateManifestContract(`synthetic-${name}`, candidate).length > 0, `manifest contract regression failed: ${name}`);
+  }
+}
+
+function assertSchemaValidatorRequiredFieldAlignment(schema) {
+  if (!schema) return;
+  compareLists("schema top-level required fields", schema.required, requiredTopLevelFields);
+  compareLists("schema inputs required fields", schema.properties?.inputs?.required, requiredInputFields);
+  compareLists("schema outputs required fields", schema.properties?.outputs?.required, requiredOutputFields);
+  compareLists("schema safetyFlags required fields", schema.properties?.safetyFlags?.required, requiredSafetyFlags);
+}
+
 function assertForbiddenClaimRegressionChecks() {
   const phrase = ["production", "ready"].join(" ");
   const cases = [
@@ -333,30 +617,17 @@ if (schema) {
   for (const flag of requiredSafetyFlags) {
     addIssue(schema.properties?.safetyFlags?.properties?.[flag]?.const === true, `schema must require safety flag ${flag}`);
   }
+  assertSchemaValidatorRequiredFieldAlignment(schema);
 }
 
+const parsedManifests = new Map();
 for (const file of manifestFiles) {
   const manifest = parseJson(file);
   if (!manifest) continue;
-  const text = read(file).toLowerCase();
-
-  addIssue(manifest.schemaVersion === schemaVersion, `${file} must use C03 schemaVersion`);
-  addIssue(manifest.publicSafe === true, `${file} must set publicSafe true`);
-  addIssue(manifest.status === "public_manifest_only", `${file} must use public_manifest_only status`);
-  for (const flag of requiredSafetyFlags) {
-    addIssue(manifest.safetyFlags?.[flag] === true, `${file} must set safety flag ${flag} true`);
-  }
-
-  addIssue(text.includes("no private runtime"), `${file} must say no private runtime`);
-  addIssue(text.includes("no connector execution"), `${file} must say no connector execution`);
-  addIssue(text.includes("no customer data"), `${file} must say no customer data`);
-  addIssue(text.includes("no secrets"), `${file} must say no secrets`);
-  addIssue(text.includes("no payment"), `${file} must say no payment`);
-  addIssue(text.includes("not executable"), `${file} must say not executable`);
-  addIssue(text.includes("manifest only") || text.includes("manifest-only"), `${file} must say manifest only`);
-  addIssue(text.includes("no regulated advice"), `${file} must say no regulated advice`);
-  addIssue(text.includes("no telemetry"), `${file} must say no telemetry`);
+  parsedManifests.set(file, manifest);
+  for (const issue of validateManifestContract(file, manifest)) issues.push(issue);
 }
+assertManifestContractRegressionChecks();
 
 const readme = exists("README.md") ? read("README.md") : "";
 const templatesReadme = exists("templates/README.md") ? read("templates/README.md") : "";
@@ -391,8 +662,23 @@ assertIncludes(schemaDoc, /Relationship to private runtime/i, "schema doc must d
 assertIncludes(schemaDoc, /Relationship to Cloud handoff/i, "schema doc must document Cloud handoff relationship");
 
 for (const file of manifestFiles) {
-  const id = file.split("/").pop().replace(".manifest.json", "");
-  assertIncludes(catalog, new RegExp(id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `catalog must list ${id}`);
+  const slugFromFile = file.split("/").pop().replace(".manifest.json", "");
+  const escapedSlug = slugFromFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assertIncludes(catalog, new RegExp(escapedSlug), `catalog must list ${slugFromFile}`);
+  addIssue(manifestsReadme.includes("*.manifest.json") || manifestsReadme.includes(slugFromFile), `manifests README must make ${slugFromFile} discoverable`);
+
+  const manifest = parsedManifests.get(file);
+  if (manifest) {
+    for (const [label, value] of [
+      ["templateId", manifest.templateId],
+      ["slug", manifest.slug],
+      ["category", manifest.category],
+      ["displayName", manifest.displayName],
+    ]) {
+      const escaped = String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      assertIncludes(catalog, new RegExp(escaped), `catalog must include ${label} for ${file}`);
+    }
+  }
 }
 assertIncludes(catalog, /templateId/i, "catalog must include templateId");
 assertIncludes(catalog, /businessJob/i, "catalog must include businessJob");
@@ -419,6 +705,7 @@ for (const phrase of [
 
 assertIncludes(statusDoc, /C01 merged in PR #1/i, "status doc must include C01 inherited state");
 assertIncludes(statusDoc, /C02 merged in PR #2/i, "status doc must include C02 inherited state");
+assertIncludes(statusDoc, /validates every manifest against all required schema fields/i, "status doc must mention C03 P2 validator feedback");
 assertIncludes(statusDoc, /v0\.6-C04[\s\S]*feat\(config\): add local\/BYOK config placeholder/, "status doc must include C04 next PR");
 
 addIssue(!validatorSource.includes(["window", "Start"].join("")), "validator must not contain context-window state");

@@ -81,6 +81,8 @@ C03 validation includes:
 - `git diff --check`;
 - `git status --short`.
 
+Review feedback addressed: the C03 validator now validates every manifest against all required schema fields, nested required fields, allowed property sets and schema/validator drift checks.
+
 ## P1/P2 prevention
 
 - Forbidden claim scanning uses tracked text files in normal git mode.
