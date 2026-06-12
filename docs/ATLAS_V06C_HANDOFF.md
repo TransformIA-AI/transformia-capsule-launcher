@@ -9,15 +9,15 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Current PR
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config scaffold
-```
-
-## Next PR after C04
-
-```text
 v0.6-C05
 docs(launch): add Product Hunt, GitHub and X launch assets
+```
+
+## Next PR after C05
+
+```text
+v0.6-C06
+feat(web): add download and launcher CTA surface
 ```
 
 ## C01 meaning
@@ -125,6 +125,33 @@ C04 adds a local/BYOK configuration scaffold so visitors can inspect where futur
 - no private runtime code;
 - no provider execution;
 - no runtime adapter;
+- no connector execution;
+- no customer data;
+- no secrets;
+- no payment implementation;
+- no Stripe;
+- no auth;
+- no database;
+- no cloud sync;
+- no telemetry.
+
+
+## C05 meaning
+
+C05 adds Product Hunt, GitHub, X, LinkedIn and demo narrative launch assets so the public launcher repo can be reviewed as a day-1 launch surface. These assets are draft copy only and remain source-available/IP safe.
+
+## C05 does not mean
+
+- no launch execution;
+- no Product Hunt submission;
+- no X or LinkedIn posting;
+- no analytics or tracking;
+- no executable launcher;
+- no installer;
+- no binaries;
+- no private runtime code;
+- no runnable templates;
+- no provider execution;
 - no connector execution;
 - no customer data;
 - no secrets;

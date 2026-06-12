@@ -29,8 +29,8 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Next Atlas PR
 
 ```text
-v0.6-C05
-docs(launch): add Product Hunt, GitHub and X launch assets
+v0.6-C06
+feat(web): add download and launcher CTA surface
 ```
 
 ## Strategic interpretation
@@ -45,7 +45,7 @@ Do not leak private runtime internals into this public repo.
 
 Do not imply production readiness before the installer/download path exists.
 
-Do not implement cloud, Stripe, auth, DB, telemetry, provider execution, connector execution or live automation in C04.
+Do not implement cloud, Stripe, auth, DB, telemetry, provider execution, connector execution or live automation in C05.
 
 
 ## License posture
@@ -89,3 +89,11 @@ Default rule: all rights reserved except limited evaluation/contribution rights 
 - No real credentials, provider execution or runtime adapter is introduced.
 - Issue #4 lessons are now codified in `docs/CODEX_PR_AND_VALIDATOR_GUARDRAILS.md`.
 - Next C05 should add launch assets while keeping public wording honest and source-available/IP safe.
+
+
+## v0.6-C05 memory
+
+- C05 adds launch copy assets only for Product Hunt, GitHub, X, LinkedIn and future demo narration.
+- No posting, submission, analytics, tracking, Product Hunt launch, X thread publication or LinkedIn publication is performed by this repo.
+- Launch assets remain source-available/IP-safe and keep private runtime, executable launcher, installer, provider execution, runnable templates, payment, Cloud sync, auth, DB and telemetry out of scope.
+- Next C06 connects the web CTA/download surface honestly without claiming unavailable launcher execution.
