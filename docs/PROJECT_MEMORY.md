@@ -29,8 +29,8 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Next Atlas PR
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config placeholder
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
 ## Strategic interpretation
@@ -45,7 +45,7 @@ Do not leak private runtime internals into this public repo.
 
 Do not imply production readiness before the installer/download path exists.
 
-Do not implement cloud, Stripe, auth, DB, telemetry, connector execution or live automation in C03.
+Do not implement cloud, Stripe, auth, DB, telemetry, provider execution, connector execution or live automation in C04.
 
 
 ## License posture
@@ -80,3 +80,12 @@ Default rule: all rights reserved except limited evaluation/contribution rights 
 - Private core remains private: no private runtime code, connector execution, customer data, secrets, prompts, raw evidence, payment, telemetry or regulated advice belongs in the manifests.
 - C03 keeps source-available/IP posture unchanged.
 - Next C04 introduces a local/BYOK config placeholder if Atlas agrees.
+
+
+## v0.6-C04 memory
+
+- C04 adds local/BYOK config scaffold only.
+- `.env.example` is placeholder-only and is not a real credential file.
+- No real credentials, provider execution or runtime adapter is introduced.
+- Issue #4 lessons are now codified in `docs/CODEX_PR_AND_VALIDATOR_GUARDRAILS.md`.
+- Next C05 should add launch assets while keeping public wording honest and source-available/IP safe.

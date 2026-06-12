@@ -9,15 +9,15 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Current PR
 
 ```text
-v0.6-C03
-feat(templates): add public Capsule template manifests
+v0.6-C04
+feat(config): add local/BYOK config scaffold
 ```
 
-## Next PR after C03
+## Next PR after C04
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config placeholder
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
 ## C01 meaning
@@ -102,6 +102,29 @@ C03 adds public-safe Capsule template manifests so first visitors can understand
 - no binaries;
 - no private runtime code;
 - no runnable templates;
+- no connector execution;
+- no customer data;
+- no secrets;
+- no payment implementation;
+- no Stripe;
+- no auth;
+- no database;
+- no cloud sync;
+- no telemetry.
+
+
+## C04 meaning
+
+C04 adds a local/BYOK configuration scaffold so visitors can inspect where future configuration will live without providing real credentials or enabling provider execution.
+
+## C04 does not mean
+
+- no executable launcher;
+- no installer;
+- no binaries;
+- no private runtime code;
+- no provider execution;
+- no runtime adapter;
 - no connector execution;
 - no customer data;
 - no secrets;
