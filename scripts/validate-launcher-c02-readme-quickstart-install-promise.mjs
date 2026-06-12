@@ -139,8 +139,21 @@ function trackedFiles() {
   return output ? output.split(/\r?\n/).filter(Boolean) : [];
 }
 
-function repositoryFiles() {
-  return [...new Set([...trackedFiles(), ...walk()])].sort();
+function claimScanFilesFromSources(tracked, fallbackFiles) {
+  const source = tracked.length > 0 ? tracked : fallbackFiles;
+  return source.filter(isTrackedTextFileForClaimScan);
+}
+
+function claimScanFiles() {
+  const tracked = trackedFiles();
+  return claimScanFilesFromSources(tracked, walk());
+}
+
+function artifactScanFiles() {
+  const files = new Set();
+  for (const file of trackedFiles()) files.add(file);
+  for (const file of walk()) files.add(file);
+  return [...files].sort();
 }
 
 function isExcludedGeneratedPath(file) {
@@ -159,10 +172,6 @@ function isTrackedTextFileForClaimScan(file) {
   if (!file || isExcludedGeneratedPath(file) || isBinaryArtifact(file) || isLockfile(file)) return false;
   if (claimScanExactFiles.has(file)) return true;
   return claimScanExtensions.has(extname(file).toLowerCase());
-}
-
-function trackedTextFilesForClaimScan(repoFiles) {
-  return repoFiles.filter(isTrackedTextFileForClaimScan);
 }
 
 function isBoundaryListFragment(line) {
@@ -266,6 +275,15 @@ function assertForbiddenClaimRegressionChecks() {
     const actual = hasPositiveForbiddenClaim(testCase.text, phrase);
     addIssue(actual === testCase.expected, `forbidden-claim regression failed: ${testCase.name}`);
   }
+}
+
+function assertClaimScanSourceRegressionChecks() {
+  const syntheticFiles = claimScanFilesFromSources(["README.md"], ["tmp-review.md", "docs/untracked.md"]);
+  addIssue(syntheticFiles.includes("README.md"), "claim-scan source regression failed: tracked README.md must be included");
+  addIssue(!syntheticFiles.includes("tmp-review.md"), "claim-scan source regression failed: untracked tmp-review.md must be excluded when tracked files exist");
+
+  const fallbackFiles = claimScanFilesFromSources([], ["README.md", "tmp-review.md"]);
+  addIssue(fallbackFiles.includes("README.md"), "claim-scan fallback regression failed: fallback README.md must be included when git metadata is unavailable");
 }
 
 function assertIncludes(text, regex, message) {
@@ -373,16 +391,19 @@ assertIncludes(statusDoc, /matching-line only/i, "status doc must include matchi
 assertIncludes(statusDoc, /v0\.6-C03[\s\S]*feat\(templates\): add public Capsule template manifests/, "status doc must include next PR");
 
 addIssue(!validatorSource.includes(["const", "filesForClaimScan", "=", "["].join(" ")), "validator must not use a hard-coded filesForClaimScan allowlist");
-addIssue(validatorSource.includes("trackedTextFilesForClaimScan"), "validator must define trackedTextFilesForClaimScan");
+addIssue(validatorSource.includes("claimScanFiles"), "validator must define claimScanFiles");
 addIssue(validatorSource.includes(["ls", "files"].join("-")), "validator must use git ls-files when available");
 addIssue(!validatorSource.includes(["window", "Start"].join("")), "validator must not use context-window negation state");
 addIssue(!validatorSource.includes(["lines", "slice(window", "Start"].join(".").replace(".Start", "Start")), ["validator must not inspect", "earlier", "lines for claim negation"].join(" "));
 addIssue(!validatorSource.includes(["previous", "12", "lines"].join(" ")), "validator must not mention or implement prior 12-line context");
 addIssue(!validatorSource.includes(["previous", "lines"].join(" ")), ["validator must not use", "earlier-line", "context for claim negation"].join(" "));
+addIssue(!validatorSource.includes(["trackedTextFilesForClaimScan", "(repository", "Files())"].join("")), "claim scan must not use the legacy tracked-text repository source");
+addIssue(!validatorSource.includes(["repository", "Files()"].join("")), "claim scan must not directly use the legacy repository file source");
+addIssue(!validatorSource.includes(["[...", "trackedFiles(), ...", "walk()]"].join("")), "claim scan source must not combine tracked files and fallback walk for claims");
 assertForbiddenClaimRegressionChecks();
+assertClaimScanSourceRegressionChecks();
 
-const repoFiles = repositoryFiles();
-const trackedClaimFiles = trackedTextFilesForClaimScan(repoFiles);
+const trackedClaimFiles = claimScanFiles();
 addIssue(trackedClaimFiles.includes("AGENTS.md"), "claim scan must include AGENTS.md from tracked text scanning");
 addIssue(trackedClaimFiles.includes("LICENSE.md"), "claim scan must include LICENSE.md from tracked text scanning");
 addIssue(trackedClaimFiles.includes("NOTICE.md"), "claim scan must include NOTICE.md from tracked text scanning");
@@ -399,10 +420,11 @@ for (const file of trackedClaimFiles) {
   }
 }
 
-const envFiles = repoFiles.filter((file) => /(^|\/)\.env(\.|$)/.test(file));
+const artifactFiles = artifactScanFiles();
+const envFiles = artifactFiles.filter((file) => /(^|\/)\.env(\.|$)/.test(file));
 addIssue(envFiles.length === 0, `.env file must not be committed: ${envFiles.join(", ")}`);
 
-const binaryFiles = repoFiles.filter(isBinaryArtifact);
+const binaryFiles = artifactFiles.filter(isBinaryArtifact);
 addIssue(binaryFiles.length === 0, `binary artifacts must not be committed: ${binaryFiles.join(", ")}`);
 
 const base = resolvePrBase();

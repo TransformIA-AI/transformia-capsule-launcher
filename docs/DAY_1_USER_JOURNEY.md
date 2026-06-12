@@ -7,7 +7,7 @@ C02 turns the public repository from strategy-only into a day-1 visitor surface 
 ## Journey
 
 1. A visitor arrives from GitHub, X, Product Hunt or a founder link.
-2. The visitor sees the one-liner: run governed AI work capsules locally or in BYOK mode, with a clear path to TransformIA Cloud.
+2. The visitor sees the one-liner: prepare the public local/BYOK path for governed AI work capsules, with a clear handoff to TransformIA Cloud.
 3. The visitor understands local/BYOK/control as a future user-owned-key and local-control path.
 4. The visitor sees the source-available/IP boundary and understands this repository is public source-available, not open source.
 5. The visitor clones the public repository.

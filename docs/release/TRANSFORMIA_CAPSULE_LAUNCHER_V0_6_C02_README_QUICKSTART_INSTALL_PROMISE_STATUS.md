@@ -84,6 +84,12 @@ C02 validation includes:
 - Changed-file detection is PR-base aware.
 - License/IP posture remains protected.
 
+
+## Review feedback addressed
+
+- README hero now frames local/BYOK as a documented/planned path, not as active capsule execution.
+- C02 forbidden-claim scanning now uses tracked text files as the normal source of truth and does not fail on untracked local scratch files.
+
 ## Next PR according to Atlas
 
 ```text

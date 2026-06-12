@@ -1,6 +1,6 @@
 # TransformIA Capsule Launcher
 
-Run governed AI work capsules locally or in BYOK mode, with a clear path to TransformIA Cloud.
+Prepare the public local/BYOK path for governed AI work capsules, with a clear handoff to TransformIA Cloud.
 
 [status: v0.6-C02] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: planned path]
 
@@ -59,7 +59,7 @@ For step-by-step guidance, see [`QUICKSTART.md`](QUICKSTART.md).
 
 The launcher strategy is local/BYOK first: users should eventually be able to bring their own keys, keep local control and evaluate the public launcher path without committing secrets and without exposing private runtime internals.
 
-C02 documents that promise only. It does not request API keys, does not create provider configuration and does not add a runnable local launcher. See [`docs/LOCAL_BYOK_QUICKSTART.md`](docs/LOCAL_BYOK_QUICKSTART.md).
+C02 documents that promise only. It does not request API keys, does not create provider configuration and does not add an executable launcher yet. See [`docs/LOCAL_BYOK_QUICKSTART.md`](docs/LOCAL_BYOK_QUICKSTART.md).
 
 ## Install promise boundary
 

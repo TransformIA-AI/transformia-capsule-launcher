@@ -13,7 +13,7 @@ Local/BYOK means user-owned keys and local control in a future launcher path. Th
 - C02 does not ask for API keys.
 - C02 does not create `.env`.
 - C02 does not configure providers.
-- C02 does not add a runnable local launcher.
+- C02 does not add an executable launcher yet.
 - C02 documents the promise and validates public-safe wording.
 
 ## Future scaffold
