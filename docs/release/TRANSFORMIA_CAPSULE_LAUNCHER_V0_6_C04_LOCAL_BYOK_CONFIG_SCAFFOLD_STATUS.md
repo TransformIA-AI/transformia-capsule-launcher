@@ -70,6 +70,8 @@ C04 validation covers:
 - `git diff --check`;
 - `git status --short`.
 
+Review feedback addressed: C04 forbidden-claim detection now catches natural provider readiness claims such as provider is configured, provider execution is configured, provider configuration is active and provider setup is complete, while preserving same-line negation boundaries.
+
 ## Known P1/P2 learnings applied
 
 - `.env.example` is allowed but real `.env` files remain forbidden.

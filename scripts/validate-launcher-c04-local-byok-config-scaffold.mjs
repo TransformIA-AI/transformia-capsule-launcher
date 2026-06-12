@@ -60,6 +60,15 @@ const forbiddenPositiveClaims = [
   ["open", "source"].join(" "),
 ];
 
+const forbiddenPositiveClaimPatterns = [
+  /\bproviders?\s+(?:is|are)\s+configured\b/i,
+  /\b(?:byok|local|model|frontier|enterprise)\s+providers?\s+(?:is\s+|are\s+)?configured\b/i,
+  /\bprovider\s+execution\s+(?:is\s+)?configured\b/i,
+  /\bprovider\s+configuration\s+(?:is\s+)?active\b/i,
+  /\bprovider\s+setup\s+(?:is\s+)?complete\b/i,
+  /\bbyok\s+provider\s+(?:is\s+)?configured\b/i,
+];
+
 const placeholderValues = new Set([
   "placeholder_only",
   "planned_local_byok",
@@ -221,7 +230,18 @@ function isNegatedOrBoundaryLine(line) {
 function hasPositiveForbiddenClaim(text, phrase) {
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(escaped, "i");
+  return hasPositiveForbiddenClaimPattern(text, pattern);
+}
+
+function hasPositiveForbiddenClaimPattern(text, pattern) {
   return text.split(/\r?\n/).some((line) => pattern.test(line) && !isNegatedOrBoundaryLine(line));
+}
+
+function hasAnyPositiveForbiddenClaim(text) {
+  return (
+    forbiddenPositiveClaims.some((phrase) => hasPositiveForbiddenClaim(text, phrase)) ||
+    forbiddenPositiveClaimPatterns.some((pattern) => hasPositiveForbiddenClaimPattern(text, pattern))
+  );
 }
 
 function validateEnvExample() {
@@ -289,6 +309,28 @@ function assertForbiddenClaimRegressionChecks() {
   addIssue(hasPositiveForbiddenClaim("provider execution enabled", phrase), "positive claim alone must fail");
   addIssue(!hasPositiveForbiddenClaim("No provider execution enabled.", phrase), "same-line negation must pass");
   addIssue(hasPositiveForbiddenClaim(["No provider execution.", "provider execution enabled"].join("\n"), phrase), "previous-line negation must not exempt a positive claim");
+
+  const providerReadinessCases = [
+    ["Provider is configured.", true],
+    ["Providers are configured.", true],
+    ["Provider execution is configured.", true],
+    ["BYOK provider is configured.", true],
+    ["Provider configuration is active.", true],
+    ["Provider setup is complete.", true],
+    ["No provider is configured.", false],
+    ["Provider is not configured.", false],
+    ["Do not claim provider is configured.", false],
+    ["Forbidden: provider is configured.", false],
+    ["No provider execution is configured.", false],
+  ];
+
+  for (const [text, shouldFail] of providerReadinessCases) {
+    const detected = hasAnyPositiveForbiddenClaim(text);
+    addIssue(
+      detected === shouldFail,
+      `provider readiness regression failed for ${JSON.stringify(text)}: expected ${shouldFail ? "forbidden" : "allowed"}`,
+    );
+  }
 }
 
 function assertClaimScanSourceRegressionChecks() {
@@ -362,6 +404,9 @@ for (const file of trackedClaimFiles) {
   const text = read(file);
   for (const phrase of forbiddenPositiveClaims) {
     addIssue(!hasPositiveForbiddenClaim(text, phrase), `forbidden positive claim in ${file}: ${phrase}`);
+  }
+  for (const pattern of forbiddenPositiveClaimPatterns) {
+    addIssue(!hasPositiveForbiddenClaimPattern(text, pattern), `forbidden positive claim in ${file}: ${pattern}`);
   }
 }
 
