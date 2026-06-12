@@ -6,8 +6,9 @@
   "type": "module",
   "scripts": {
     "validate:bootstrap-context": "node scripts/validate-bootstrap-context.mjs",
-    "quality": "npm run -s validate:bootstrap-context && npm run -s validate:launcher-public-repo-strategy",
-    "validate:launcher-public-repo-strategy": "node scripts/validate-launcher-public-repo-strategy.mjs"
+    "quality": "npm run -s validate:bootstrap-context && npm run -s validate:launcher-public-repo-strategy && npm run -s validate:launcher-c02-readme-quickstart-install-promise",
+    "validate:launcher-public-repo-strategy": "node scripts/validate-launcher-public-repo-strategy.mjs",
+    "validate:launcher-c02-readme-quickstart-install-promise": "node scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs"
   },
   "license": "SEE LICENSE IN LICENSE.md"
 }
