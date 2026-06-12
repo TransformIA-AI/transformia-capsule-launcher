@@ -1,0 +1,12 @@
+{
+  "name": "transformia-capsule-launcher",
+  "version": "0.6.00",
+  "private": false,
+  "description": "Public distribution surface for TransformIA Capsule Launcher.",
+  "type": "module",
+  "scripts": {
+    "validate:bootstrap-context": "node scripts/validate-bootstrap-context.mjs",
+    "quality": "npm run -s validate:bootstrap-context"
+  },
+  "license": "SEE LICENSE IN LICENSE.md"
+}

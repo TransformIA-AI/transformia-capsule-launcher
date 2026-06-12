@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.*
+dist
+build
+.next
+coverage
+.DS_Store
+*.log
+secrets
+*.pem
+*.key
+*.p12
+*.pfx
