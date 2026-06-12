@@ -55,3 +55,11 @@ The launcher repository is public source-available, not open source.
 License source of truth: `LICENSE.md`.
 
 Default rule: all rights reserved except limited evaluation/contribution rights expressly granted in the custom license.
+
+## v0.6-C01 memory
+
+- The TransformIA Capsule Launcher repository was bootstrapped as the public distribution and onboarding surface for the launcher.
+- The repository keeps an IP-protected source-available posture through `LICENSE.md`, `NOTICE.md` and `docs/IP_AND_LICENSE_BOUNDARY.md`.
+- C01 formalizes the public repo strategy before quickstart, public templates, installer or download work.
+- Private core remains private: no private runtime source, customer material, secrets, connector workflows or proprietary orchestration logic belongs here.
+- Next C02 should add README, quickstart and install-promise guidance without claiming an installer or exposing private runtime internals.

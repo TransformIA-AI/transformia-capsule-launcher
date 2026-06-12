@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "validate:bootstrap-context": "node scripts/validate-bootstrap-context.mjs",
-    "quality": "npm run -s validate:bootstrap-context"
+    "quality": "npm run -s validate:bootstrap-context && npm run -s validate:launcher-public-repo-strategy",
+    "validate:launcher-public-repo-strategy": "node scripts/validate-launcher-public-repo-strategy.mjs"
   },
   "license": "SEE LICENSE IN LICENSE.md"
 }
