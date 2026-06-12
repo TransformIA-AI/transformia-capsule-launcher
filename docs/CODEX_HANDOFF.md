@@ -24,21 +24,26 @@
 20. `docs/TEMPLATE_MANIFEST_CATALOG.md`
 21. `docs/TEMPLATE_SAFETY_REVIEW_CHECKLIST.md`
 22. `docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_6_C03_PUBLIC_TEMPLATE_MANIFESTS_STATUS.md`
+23. `docs/CODEX_PR_AND_VALIDATOR_GUARDRAILS.md`
+24. `docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`
+25. `docs/BYOK_SECRET_HANDLING_BOUNDARY.md`
+26. `docs/CONFIG_PLACEHOLDER_SCHEMA.md`
+27. `docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_6_C04_LOCAL_BYOK_CONFIG_SCAFFOLD_STATUS.md`
 
 ## Current PR
 
 ```text
-v0.6-C03
-feat(templates): add public Capsule template manifests
+v0.6-C04
+feat(config): add local/BYOK config scaffold
 ```
 
-C03 is docs, manifest-contract, validation and package-script scope. It adds public-safe, non-executable Capsule template manifests without shipping an executable launcher, installer, binary, private runtime, connector execution, payment, auth, DB, telemetry or Cloud sync.
+C04 is docs, config-contract, validation and package-script scope. It adds a placeholder-only local/BYOK config scaffold without shipping an executable launcher, installer, binary, private runtime, provider execution, connector execution, payment, auth, DB, telemetry or Cloud sync.
 
 ## After merge, next PR
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config placeholder
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
-C04 should add a local/BYOK config placeholder only if Atlas confirms that scope, while keeping secrets and provider configuration out of git.
+C05 should keep launch assets honest, source-available/IP safe and explicit that launcher execution, provider setup, installer packaging and private runtime remain absent until implemented and approved.

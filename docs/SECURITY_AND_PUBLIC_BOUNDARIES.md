@@ -11,7 +11,7 @@ Do not place private core, customer data, secrets, proprietary runtime logic or 
 - credentials;
 - API keys;
 - private certificates;
-- environment files;
+- real environment files, except placeholder-only `.env.example`;
 - customer workspaces;
 - raw evidence;
 - raw connector payloads;
@@ -29,7 +29,8 @@ Do not place private core, customer data, secrets, proprietary runtime logic or 
 - install promise boundaries;
 - local/BYOK onboarding explanations;
 - future Cloud handoff explanations;
-- validators that prevent overclaims.
+- validators that prevent overclaims;
+- placeholder-only `.env.example` for the C04 local/BYOK scaffold.
 
 ## Claims not allowed before implementation
 
@@ -42,7 +43,9 @@ Do not place private core, customer data, secrets, proprietary runtime logic or 
 - active subscription state;
 - active cloud sync;
 - private runtime bundled;
-- enabled live connector execution.
+- enabled live connector execution;
+- configured provider execution;
+- local capsule execution enabled;
 
 ## Sensitive future work
 

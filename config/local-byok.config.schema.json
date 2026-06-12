@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transformia.local/schemas/local-byok.config.schema.json",
+  "title": "TransformIA Capsule Launcher local/BYOK placeholder config schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "configMode",
+    "executable",
+    "providerExecutionEnabled",
+    "privateRuntimeRequired",
+    "secretsRequiredInC04",
+    "envFileRequiredInC04",
+    "localMode",
+    "providerPlaceholders",
+    "secretHandling",
+    "runtimeBoundary",
+    "cloudHandoff",
+    "publicSafe"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "transformia-capsule-local-byok-config.v0.6-c04"
+    },
+    "status": {
+      "type": "string",
+      "const": "placeholder_only"
+    },
+    "configMode": {
+      "type": "string",
+      "const": "local_byok_planned"
+    },
+    "executable": {
+      "type": "boolean",
+      "const": false
+    },
+    "providerExecutionEnabled": {
+      "type": "boolean",
+      "const": false
+    },
+    "privateRuntimeRequired": {
+      "type": "boolean",
+      "const": false
+    },
+    "secretsRequiredInC04": {
+      "type": "boolean",
+      "const": false
+    },
+    "envFileRequiredInC04": {
+      "type": "boolean",
+      "const": false
+    },
+    "localMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabledToday", "planned", "description"],
+      "properties": {
+        "enabledToday": {
+          "type": "boolean",
+          "const": false
+        },
+        "planned": {
+          "type": "boolean",
+          "const": true
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "providerPlaceholders": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "active", "description"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "frontier_model_provider_placeholder",
+              "local_model_provider_placeholder",
+              "enterprise_provider_placeholder"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "const": "not_configured"
+          },
+          "active": {
+            "type": "boolean",
+            "const": false
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "secretHandling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["neverCommitRealSecrets", "envExampleOnly", "realCredentialsAcceptedInC04", "storage"],
+      "properties": {
+        "neverCommitRealSecrets": {
+          "type": "boolean",
+          "const": true
+        },
+        "envExampleOnly": {
+          "type": "boolean",
+          "const": true
+        },
+        "realCredentialsAcceptedInC04": {
+          "type": "boolean",
+          "const": false
+        },
+        "storage": {
+          "type": "string",
+          "const": "not_implemented"
+        }
+      }
+    },
+    "runtimeBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["noPrivateRuntime", "noRuntimeAdapter", "noConnectorExecution"],
+      "properties": {
+        "noPrivateRuntime": {
+          "type": "boolean",
+          "const": true
+        },
+        "noRuntimeAdapter": {
+          "type": "boolean",
+          "const": true
+        },
+        "noConnectorExecution": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "cloudHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implemented", "planned"],
+      "properties": {
+        "implemented": {
+          "type": "boolean",
+          "const": false
+        },
+        "planned": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "publicSafe": {
+      "type": "boolean",
+      "const": true
+    }
+  }
+}

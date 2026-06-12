@@ -97,7 +97,7 @@ const binaryExtensions = new Set([
 
 const excludedScanDirs = new Set([".git", "node_modules", "dist", "build", "coverage"]);
 const claimScanExtensions = new Set([".md", ".txt", ".json", ".yml", ".yaml"]);
-const claimScanExactFiles = new Set([".gitignore"]);
+const claimScanExactFiles = new Set([".gitignore", ".env.example"]);
 const claimScanExcludedFiles = new Set([
   "package-lock.json",
   "npm-shrinkwrap.json",
@@ -746,8 +746,14 @@ for (const file of trackedClaimFiles) {
 }
 
 const artifactFiles = artifactScanFiles();
-const envFiles = artifactFiles.filter((file) => /(^|\/)\.env(\.|$)/.test(file));
+const envFiles = artifactFiles.filter((file) => /(^|\/)\.env(\.|$)/.test(file) && file !== ".env.example");
 addIssue(envFiles.length === 0, `.env file must not be committed: ${envFiles.join(", ")}`);
+if (exists(".env.example")) {
+  const envExample = read(".env.example");
+  addIssue(envExample.includes("placeholder_only"), ".env.example must remain placeholder-only");
+  addIssue(!/(OPENAI_API_KEY|ANTHROPIC_API_KEY|STRIPE_SECRET|GOOGLE_API_KEY|BEARER_TOKEN)/i.test(envExample), ".env.example must not contain active provider secret names");
+  addIssue(!/(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})/.test(envExample), ".env.example must not contain real secret-looking values");
+}
 
 const binaryFiles = artifactFiles.filter(isBinaryArtifact);
 addIssue(binaryFiles.length === 0, `binary artifacts must not be committed: ${binaryFiles.join(", ")}`);

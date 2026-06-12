@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "transformia-capsule-local-byok-config.v0.6-c04",
+  "status": "placeholder_only",
+  "configMode": "local_byok_planned",
+  "executable": false,
+  "providerExecutionEnabled": false,
+  "privateRuntimeRequired": false,
+  "secretsRequiredInC04": false,
+  "envFileRequiredInC04": false,
+  "localMode": {
+    "enabledToday": false,
+    "planned": true,
+    "description": "C04 reserves the public-safe shape for a future local/BYOK launcher path without enabling local capsule execution today."
+  },
+  "providerPlaceholders": [
+    {
+      "id": "frontier_model_provider_placeholder",
+      "status": "not_configured",
+      "active": false,
+      "description": "Generic placeholder for a future frontier model provider slot."
+    },
+    {
+      "id": "local_model_provider_placeholder",
+      "status": "not_configured",
+      "active": false,
+      "description": "Generic placeholder for a future local model provider slot."
+    },
+    {
+      "id": "enterprise_provider_placeholder",
+      "status": "not_configured",
+      "active": false,
+      "description": "Generic placeholder for a future enterprise provider slot."
+    }
+  ],
+  "secretHandling": {
+    "neverCommitRealSecrets": true,
+    "envExampleOnly": true,
+    "realCredentialsAcceptedInC04": false,
+    "storage": "not_implemented"
+  },
+  "runtimeBoundary": {
+    "noPrivateRuntime": true,
+    "noRuntimeAdapter": true,
+    "noConnectorExecution": true
+  },
+  "cloudHandoff": {
+    "implemented": false,
+    "planned": true
+  },
+  "publicSafe": true
+}

@@ -138,8 +138,14 @@ for (const [file, text] of allTextFiles) {
   }
 }
 
-const forbiddenFiles = [".env", ".env.local", ".env.production"];
+const forbiddenFiles = [".env", ".env.local", ".env.production", ".env.development", ".env.staging"];
 for (const file of forbiddenFiles) addIssue(!exists(file), `forbidden env file committed: ${file}`);
+if (exists(".env.example")) {
+  const envExample = read(".env.example");
+  addIssue(envExample.includes("placeholder_only"), ".env.example must remain placeholder-only");
+  addIssue(!/(OPENAI_API_KEY|ANTHROPIC_API_KEY|STRIPE_SECRET|GOOGLE_API_KEY|BEARER_TOKEN)/i.test(envExample), ".env.example must not contain active provider secret names");
+  addIssue(!/(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})/.test(envExample), ".env.example must not contain real secret-looking values");
+}
 
 const binaryFiles = [".", "docs", "templates", "scripts"].flatMap((dir) => walk(dir === "." ? "" : dir)).filter(Boolean).filter((file) => {
   const ext = extname(file).toLowerCase();

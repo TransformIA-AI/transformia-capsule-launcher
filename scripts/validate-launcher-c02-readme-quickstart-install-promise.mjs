@@ -44,7 +44,7 @@ const binaryExtensions = new Set([
 
 const excludedScanDirs = new Set([".git", "node_modules", "dist", "build", "coverage"]);
 const claimScanExtensions = new Set([".md", ".txt", ".json", ".yml", ".yaml"]);
-const claimScanExactFiles = new Set([".gitignore"]);
+const claimScanExactFiles = new Set([".gitignore", ".env.example"]);
 const claimScanExcludedFiles = new Set([
   "package-lock.json",
   "npm-shrinkwrap.json",
@@ -328,12 +328,12 @@ assertIncludes(readme, /local\/BYOK/i, "README must include local/BYOK");
 assertIncludes(readme, /control/i, "README must include control");
 assertIncludes(readme, /source-available, not open source/i, "README must state source-available, not open source");
 assertIncludes(readme, /TransformIA Cloud/i, "README must include TransformIA Cloud handoff");
-assertIncludes(readme, /\[status: v0\.6-C02\]/, "README must include static status badge");
+assertIncludes(readme, /\[status: v0\.6-C0[2-9]\]/, "README must include static status badge");
 assertIncludes(readme, /\[license: source-available\]/, "README must include static source-available badge");
 assertIncludes(readme, /\[private core: not included\]/, "README must include private-core badge");
 assertIncludes(readme, /\[installer: promise only\]/, "README must include installer promise badge");
-assertIncludes(readme, /\[local\/BYOK: planned path\]/, "README must include local/BYOK badge");
-assertIncludes(readme, /v0\.6-C03[\s\S]*feat\(templates\): add public Capsule template manifests/, "README must include next Atlas PR");
+assertIncludes(readme, /\[local\/BYOK: (planned path|config scaffold only)\]/, "README must include local/BYOK badge");
+assertIncludes(readme, /v0\.6-C0[3-5][\s\S]*(feat\(templates\): add public Capsule template manifests|docs\(launch\): add Product Hunt, GitHub and X launch assets)/, "README must include Atlas PR progression");
 assertNotIncludes(readme, /npm install/i, "README must not require npm install in quickstart");
 
 assertIncludes(quickstart, /under 5 minutes/i, "QUICKSTART must say under 5 minutes");
@@ -341,7 +341,7 @@ assertIncludes(quickstart, /Git/i, "QUICKSTART must list Git");
 assertIncludes(quickstart, /Node\.js 20\+/i, "QUICKSTART must list Node.js 20+");
 assertIncludes(quickstart, /npm/i, "QUICKSTART must list npm");
 assertIncludes(quickstart, /npm run -s quality/, "QUICKSTART must include quality command");
-assertIncludes(quickstart, /v0\.6-C03[\s\S]*feat\(templates\): add public Capsule template manifests/, "QUICKSTART must include next Atlas PR");
+assertIncludes(quickstart, /v0\.6-C0[3-5][\s\S]*(feat\(templates\): add public Capsule template manifests|docs\(launch\): add Product Hunt, GitHub and X launch assets)/, "QUICKSTART must include Atlas PR progression");
 assertNotIncludes(quickstart, /^\s*API[_ -]?KEY\s*=/im, "QUICKSTART must not include API key assignment");
 assertNotIncludes(quickstart, /touch\s+\.env/i, "QUICKSTART must not create .env");
 assertNotIncludes(quickstart, /cat\s+>\s*\.env/i, "QUICKSTART must not write .env");
@@ -349,9 +349,9 @@ assertNotIncludes(quickstart, /git clone .*runtime/i, "QUICKSTART must not clone
 
 assertIncludes(localByok, /user-owned keys/i, "local/BYOK doc must mention user-owned keys");
 assertIncludes(localByok, /local control/i, "local/BYOK doc must mention local control");
-assertIncludes(localByok, /C02 does not ask for API keys/i, "local/BYOK doc must say C02 does not ask for API keys");
-assertIncludes(localByok, /C02 does not create `.env`/i, "local/BYOK doc must say C02 does not create .env");
-assertIncludes(localByok, /C04 may add a BYOK config scaffold/i, "local/BYOK doc must mention possible C04 scaffold");
+assertIncludes(localByok, /C0[24] does not ask for API keys/i, "local/BYOK doc must say no API keys are requested");
+assertIncludes(localByok, /C0[24] does not create (a real )?`.env`/i, "local/BYOK doc must say no real .env is created");
+assertIncludes(localByok, /(C04 may add|C04 adds) a BYOK config scaffold/i, "local/BYOK doc must mention C04 scaffold");
 assertIncludes(localByok, /No keys should ever be committed/i, "local/BYOK doc must say no keys should be committed");
 
 assertIncludes(gifPlan, /No actual GIF is added in C02/i, "GIF doc must state no actual GIF in C02");
@@ -421,8 +421,14 @@ for (const file of trackedClaimFiles) {
 }
 
 const artifactFiles = artifactScanFiles();
-const envFiles = artifactFiles.filter((file) => /(^|\/)\.env(\.|$)/.test(file));
+const envFiles = artifactFiles.filter((file) => /(^|\/)\.env(\.|$)/.test(file) && file !== ".env.example");
 addIssue(envFiles.length === 0, `.env file must not be committed: ${envFiles.join(", ")}`);
+if (exists(".env.example")) {
+  const envExample = read(".env.example");
+  addIssue(envExample.includes("placeholder_only"), ".env.example must remain placeholder-only");
+  addIssue(!/(OPENAI_API_KEY|ANTHROPIC_API_KEY|STRIPE_SECRET|GOOGLE_API_KEY|BEARER_TOKEN)/i.test(envExample), ".env.example must not contain active provider secret names");
+  addIssue(!/(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})/.test(envExample), ".env.example must not contain real secret-looking values");
+}
 
 const binaryFiles = artifactFiles.filter(isBinaryArtifact);
 addIssue(binaryFiles.length === 0, `binary artifacts must not be committed: ${binaryFiles.join(", ")}`);

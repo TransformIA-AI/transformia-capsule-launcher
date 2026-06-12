@@ -2,20 +2,21 @@
 
 Prepare the public local/BYOK path for governed AI work capsules, with a clear handoff to TransformIA Cloud.
 
-[status: v0.6-C02] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: planned path] [templates: manifest only]
+[status: v0.6-C04] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: config scaffold only] [templates: manifest only]
 
 TransformIA Capsule Launcher is the public distribution, onboarding and download surface for TransformIA Capsule. It makes the local/BYOK path understandable without exposing the private TransformIA runtime, Exocortex core, customer material, production connector workflows or proprietary orchestration logic.
 
 ## Day-1 status
 
 ```text
-v0.6-C03
-feat(templates): add public Capsule template manifests
+v0.6-C04
+feat(config): add local/BYOK config scaffold
 ```
 
 - Public launcher distribution surface.
-- Docs, validation, quickstart promise and public template manifests are available for first visitors.
+- Docs, validation, quickstart promise, public template manifests and local/BYOK config placeholders are available for first visitors.
 - Five public-safe Capsule template manifests are available as manifest-only previews.
+- `.env.example` exists as placeholder-only documentation; real secrets must never be committed.
 - No executable launcher yet.
 - No installer yet.
 - No private runtime included.
@@ -33,7 +34,7 @@ cd transformia-capsule-launcher
 npm run -s quality
 ```
 
-That command validates the bootstrap context, the C01 public repo strategy, the C02 README/quickstart/install-promise boundary and the C03 public template manifest boundary. It does not ask for API keys, does not create an `.env` file, does not clone a private runtime and does not configure connectors.
+That command validates the bootstrap context, the C01 public repo strategy, the C02 README/quickstart/install-promise boundary, the C03 public template manifest boundary and the C04 local/BYOK config scaffold. It does not ask for API keys, does not create a real `.env` file, does not clone a private runtime and does not configure connectors.
 
 For step-by-step guidance, see [`QUICKSTART.md`](QUICKSTART.md).
 
@@ -49,13 +50,27 @@ For step-by-step guidance, see [`QUICKSTART.md`](QUICKSTART.md).
 
 - Not the private TransformIA runtime or Exocortex core.
 - Not a bundled private core. The private runtime/core is not included.
-- Not an executable launcher in C02.
-- Not a working installer in C02.
-- Not a binary release, archive or package release in C02.
+- Not an executable launcher in C04.
+- Not a working installer in C04.
+- Not a binary release, archive or package release in C04.
+- Not active local capsule execution in C04.
+- Not a configured BYOK provider path in C04.
 - Not a connector execution system.
 - Not a payment, Stripe, checkout, customer portal, auth, database, telemetry, analytics or cloud-sync implementation.
 - Not a place for customer data, secrets, raw evidence, private workflows, internal runbooks, private prompts or proprietary runtime internals.
 
+
+## Local/BYOK config scaffold
+
+C04 adds placeholder config only. The repository now shows where future local/BYOK configuration will live, but it does not enable local capsule execution.
+
+- `.env.example` exists as a placeholder sample; real secrets must never be committed.
+- `config/local-byok.config.example.json` is declarative and non-executable.
+- No local launcher execution exists yet.
+- No provider is configured.
+- No private runtime is included.
+
+See [`config/README.md`](config/README.md) and [`docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`](docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md).
 
 ## Public template manifests
 
@@ -72,7 +87,7 @@ C03 does not change the C02 quickstart into a runnable template path. The curren
 
 The launcher strategy is local/BYOK first: users should eventually be able to bring their own keys, keep local control and evaluate the public launcher path without committing secrets and without exposing private runtime internals.
 
-C02 documents that promise only. It does not request API keys, does not create provider configuration and does not add an executable launcher yet. See [`docs/LOCAL_BYOK_QUICKSTART.md`](docs/LOCAL_BYOK_QUICKSTART.md).
+C04 adds a placeholder-only config scaffold for that promise. It does not request API keys, does not configure providers and does not add an executable launcher yet. See [`docs/LOCAL_BYOK_QUICKSTART.md`](docs/LOCAL_BYOK_QUICKSTART.md) and [`docs/BYOK_SECRET_HANDLING_BOUNDARY.md`](docs/BYOK_SECRET_HANDLING_BOUNDARY.md).
 
 ## Install promise boundary
 
@@ -86,7 +101,7 @@ The future README/demo GIF is documented as a placeholder only. C02 adds no GIF 
 
 ## TransformIA Cloud handoff
 
-TransformIA Cloud is a future handoff path, not a C02 implementation. The Cloud upgrade path will be documented in future PRs and is tracked at [`docs/CLOUD_HANDOFF_BOUNDARY.md`](docs/CLOUD_HANDOFF_BOUNDARY.md).
+TransformIA Cloud is a future handoff path, not a C04 implementation. The Cloud upgrade path will be documented in future PRs and is tracked at [`docs/CLOUD_HANDOFF_BOUNDARY.md`](docs/CLOUD_HANDOFF_BOUNDARY.md).
 
 C02 includes no Cloud auth, no Cloud sync, no customer portal, no subscription state, no tenant state, no payment and no Stripe flow.
 
@@ -155,29 +170,29 @@ node scripts/validate-launcher-c03-public-template-manifests.mjs
 Current Atlas milestone:
 
 ```text
-v0.6-C03
-feat(templates): add public Capsule template manifests
-```
-
-Previous public visitor milestone:
-
-```text
-v0.6-C02
-feat(launcher): add README, quickstart and install promise
-```
-
-Next Atlas PR after C03:
-
-```text
 v0.6-C04
-feat(config): add local/BYOK config placeholder
+feat(config): add local/BYOK config scaffold
+```
+
+Previous completed milestones:
+
+- v0.6-C01: public repo strategy.
+- v0.6-C02: README / quickstart / install promise.
+- v0.6-C03: public template manifests.
+
+Next Atlas PR:
+
+```text
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
 Expected future sequence:
 
-- C03: public Capsule template manifests after sanitization.
-- C04, if Atlas scopes it: local/BYOK configuration scaffold without committed keys.
-- Later approved PRs: download packaging boundaries, installer documentation and Cloud handoff refinement.
+- C05: launch assets.
+- C06: web download / launcher CTA surface.
+- C07: shareable template pages.
+- C08: referral / powered-by loop.
 
 ## Contribution boundary
 
