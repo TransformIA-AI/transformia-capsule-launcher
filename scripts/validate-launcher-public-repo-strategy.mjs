@@ -156,9 +156,13 @@ function trackedTextFilesForClaimScan(repoFiles) {
   return repoFiles.filter(isTrackedTextFileForClaimScan);
 }
 
-function isNegatedOrBoundaryLine(lines, index) {
-  const windowStart = Math.max(0, index - 12);
-  const context = lines.slice(windowStart, index + 1).join("\n").toLowerCase();
+function isBoundaryListFragment(line) {
+  const trimmed = line.trim();
+  return /^[-*]\s+/.test(trimmed) && trimmed.endsWith(";");
+}
+
+function isNegatedOrBoundaryLine(line) {
+  const lower = line.toLowerCase();
   const boundaryMarkers = [
     "not ",
     "no ",
@@ -193,7 +197,7 @@ function isNegatedOrBoundaryLine(lines, index) {
     "approval",
     "implying",
   ];
-  return boundaryMarkers.some((marker) => context.includes(marker));
+  return isBoundaryListFragment(line) || boundaryMarkers.some((marker) => lower.includes(marker));
 }
 
 function hasPositiveForbiddenClaim(text, phrase) {
@@ -207,8 +211,44 @@ function hasPositiveForbiddenClaim(text, phrase) {
 
   return lines.some((line, index) => {
     if (!pattern.test(line)) return false;
-    return !isNegatedOrBoundaryLine(lines, index);
+    return !isNegatedOrBoundaryLine(line);
   });
+}
+
+function assertForbiddenClaimRegressionChecks() {
+  const phrase = ["production", "ready"].join(" ");
+  const cases = [
+    {
+      name: "positive claim alone returns true",
+      text: "TransformIA Capsule Launcher is production ready.",
+      expected: true,
+    },
+    {
+      name: "previous-line negation does not exempt positive claim",
+      text: ["No installer yet.", "", "TransformIA Capsule Launcher is production ready."].join("\n"),
+      expected: true,
+    },
+    {
+      name: "same-line negation returns false",
+      text: "TransformIA Capsule Launcher is not production ready.",
+      expected: false,
+    },
+    {
+      name: "forbidden label returns false",
+      text: "Forbidden: production ready.",
+      expected: false,
+    },
+    {
+      name: "non-goal label returns false",
+      text: "Non-goal: production ready.",
+      expected: false,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const actual = hasPositiveForbiddenClaim(testCase.text, phrase);
+    addIssue(actual === testCase.expected, `forbidden claim regression failed: ${testCase.name}`);
+  }
 }
 
 for (const file of requiredFiles) addIssue(exists(file), `required file missing: ${file}`);
@@ -271,11 +311,16 @@ addIssue(exists("docs/IP_AND_LICENSE_BOUNDARY.md"), "docs/IP_AND_LICENSE_BOUNDAR
 addIssue(!validatorSource.includes(["const", "filesForClaimScan", "=", "["].join(" ")), "validator must not use a hard-coded filesForClaimScan allowlist");
 addIssue(validatorSource.includes("trackedTextFilesForClaimScan"), "validator must define trackedTextFilesForClaimScan");
 addIssue(validatorSource.includes(["ls", "files"].join("-")), "validator must use git ls-files when available");
+addIssue(!validatorSource.includes(["window", "Start"].join("")), "validator must not use context-window negation state");
+addIssue(!validatorSource.includes(["lines", "slice(window", "Start"].join(".").replace(".Start", "Start")), ["validator must not inspect", "earlier", "lines for claim negation"].join(" "));
+addIssue(!validatorSource.includes(["previous", "12", "lines"].join(" ")), "validator must not mention or implement previous 12 line context");
+addIssue(!validatorSource.includes(["previous", "lines"].join(" ")), ["validator must not use", "earlier-line", "context for claim negation"].join(" "));
 addIssue(filesForClaimScan.includes("AGENTS.md"), "claim scan must include AGENTS.md from tracked text scanning");
 addIssue(filesForClaimScan.includes("LICENSE.md"), "claim scan must include LICENSE.md from tracked text scanning");
 addIssue(filesForClaimScan.includes("NOTICE.md"), "claim scan must include NOTICE.md from tracked text scanning");
 addIssue(filesForClaimScan.includes("docs/IP_AND_LICENSE_BOUNDARY.md"), "claim scan must include docs/IP_AND_LICENSE_BOUNDARY.md from tracked text scanning");
 addIssue(filesForClaimScan.some((file) => file.startsWith("docs/") && !requiredFiles.includes(file)), "claim scan must include future/general tracked docs, not only a fixed C01 docs allowlist");
+assertForbiddenClaimRegressionChecks();
 
 for (const file of filesForClaimScan) {
   const text = read(file);

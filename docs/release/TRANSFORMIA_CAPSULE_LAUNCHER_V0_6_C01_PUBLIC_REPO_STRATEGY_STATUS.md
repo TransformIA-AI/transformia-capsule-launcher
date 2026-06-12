@@ -57,6 +57,7 @@ No production, commercial, redistribution, SaaS, white-label, managed-service, p
 ## Validation
 
 Review feedback addressed: the C01 validator now scans tracked text files for forbidden positive install/payment/license/private-core claims instead of only a fixed C01 allowlist.
+Review feedback addressed: forbidden claim negation is now evaluated on the matching line only; previous-line context no longer suppresses positive install/payment/license/private-core claims.
 
 C01 validation consists of:
 
