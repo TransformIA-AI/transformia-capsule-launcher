@@ -614,6 +614,12 @@ const schema = parseJson("templates/manifests/template-manifest.schema.json");
 if (schema) {
   addIssue(schema.properties?.schemaVersion?.const === schemaVersion, "schema must fix the C03 schemaVersion");
   addIssue(schema.properties?.publicSafe?.const === true, "schema must require publicSafe true");
+  const statusEnum = schema.properties?.status?.enum;
+  addIssue(
+    Array.isArray(statusEnum) && statusEnum.length === 1 && statusEnum[0] === "public_manifest_only",
+    "schema status enum must be exactly public_manifest_only for C03",
+  );
+  addIssue(!Array.isArray(statusEnum) || !statusEnum.includes("planned_template"), "schema status enum must not include planned_template in C03");
   for (const flag of requiredSafetyFlags) {
     addIssue(schema.properties?.safetyFlags?.properties?.[flag]?.const === true, `schema must require safety flag ${flag}`);
   }
@@ -713,6 +719,12 @@ addIssue(!validatorSource.includes(["lines", "slice", "(", "window", "Start"].jo
 addIssue(!validatorSource.includes(["repository", "Files"].join("")), "claim scan source must not use legacy repo-file union");
 addIssue(validatorSource.includes("claimScanFilesFromSources"), "validator must expose claimScanFilesFromSources regression path");
 addIssue(validatorSource.includes(["ls", "files"].join("-")), "validator must use git ls-files when available");
+const schemaDiffNoveltyPattern = ["changedFiles", "includes", "templates/manifests/template-manifest.schema.json"].join(".").replace("includes.", "includes(\"") + "\")";
+const validatorDiffNoveltyPattern = ["changedFiles", "includes", "scripts/validate-launcher-c03-public-template-manifests.mjs"].join(".").replace("includes.", "includes(\"") + "\")";
+addIssue(!validatorSource.includes(schemaDiffNoveltyPattern), "validator must not require schema file novelty in future diffs");
+addIssue(!validatorSource.includes(validatorDiffNoveltyPattern), "validator must not require validator file novelty in future diffs");
+addIssue(!validatorSource.includes(["must include C03", "schema in changed files"].join(" ")), "validator must not mention schema diff novelty");
+addIssue(!validatorSource.includes(["must include C03", "validator in changed files"].join(" ")), "validator must not mention validator diff novelty");
 assertForbiddenClaimRegressionChecks();
 assertClaimScanSourceRegressionChecks();
 
@@ -743,8 +755,6 @@ addIssue(binaryFiles.length === 0, `binary artifacts must not be committed: ${bi
 const base = resolvePrBase();
 const changedFiles = changedFilesFromBase(base);
 addIssue(Boolean(base), "PR-base aware changed-file detection could not resolve a base");
-addIssue(changedFiles.includes("templates/manifests/template-manifest.schema.json"), "PR-base changed files must include manifest schema");
-addIssue(changedFiles.includes("scripts/validate-launcher-c03-public-template-manifests.mjs"), "PR-base changed files must include C03 validator");
 
 if (issues.length > 0) {
   console.error("TransformIA Capsule Launcher C03 public template manifests validation failed:");

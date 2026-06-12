@@ -20,7 +20,7 @@ Every manifest must include:
 - `templateId`;
 - `slug`;
 - `displayName`;
-- `status`: `public_manifest_only` for C03;
+- `status`: `public_manifest_only` for C03. `planned_template` is intentionally not allowed in C03; a future Atlas PR may introduce a stronger template status only if separately approved and validated;
 - `category`;
 - `targetUser`;
 - `businessJob`;

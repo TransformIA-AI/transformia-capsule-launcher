@@ -46,7 +46,9 @@
       "minLength": 3
     },
     "status": {
-      "enum": ["public_manifest_only", "planned_template"]
+      "enum": [
+        "public_manifest_only"
+      ]
     },
     "category": {
       "enum": [
@@ -76,7 +78,10 @@
     "inputs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["publicSafeExamples", "forbiddenData"],
+      "required": [
+        "publicSafeExamples",
+        "forbiddenData"
+      ],
       "properties": {
         "publicSafeExamples": {
           "type": "array",
@@ -97,7 +102,10 @@
     "outputs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["publicSafeOutputs", "nonGoals"],
+      "required": [
+        "publicSafeOutputs",
+        "nonGoals"
+      ],
       "properties": {
         "publicSafeOutputs": {
           "type": "array",
@@ -157,14 +165,30 @@
         "manifestOnly"
       ],
       "properties": {
-        "noPrivateRuntime": { "const": true },
-        "noConnectorExecution": { "const": true },
-        "noCustomerData": { "const": true },
-        "noSecrets": { "const": true },
-        "noRegulatedAdvice": { "const": true },
-        "noPayment": { "const": true },
-        "noTelemetry": { "const": true },
-        "manifestOnly": { "const": true }
+        "noPrivateRuntime": {
+          "const": true
+        },
+        "noConnectorExecution": {
+          "const": true
+        },
+        "noCustomerData": {
+          "const": true
+        },
+        "noSecrets": {
+          "const": true
+        },
+        "noRegulatedAdvice": {
+          "const": true
+        },
+        "noPayment": {
+          "const": true
+        },
+        "noTelemetry": {
+          "const": true
+        },
+        "manifestOnly": {
+          "const": true
+        }
       }
     },
     "futureImplementationNotes": {

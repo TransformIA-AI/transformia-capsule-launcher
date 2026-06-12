@@ -83,6 +83,10 @@ C03 validation includes:
 
 Review feedback addressed: the C03 validator now validates every manifest against all required schema fields, nested required fields, allowed property sets and schema/validator drift checks.
 
+Review feedback addressed: C03 validator no longer requires C03 files to appear in every future diff; it validates durable repository state instead.
+
+Review feedback addressed: C03 schema now constrains manifest status to public_manifest_only only.
+
 ## P1/P2 prevention
 
 - Forbidden claim scanning uses tracked text files in normal git mode.
