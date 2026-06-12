@@ -32,3 +32,8 @@ Future install guidance should aim for:
 Before an installer exists and is approved, repository wording must not claim that an installer, binary download, one-click setup or package release is available.
 
 C01 includes no binary release and no installer artifact.
+
+
+## C02 README and quickstart reference
+
+C02 makes the install promise visible through `README.md`, `QUICKSTART.md` and `docs/LOCAL_BYOK_QUICKSTART.md`. The current public path is clone and validate only. C02 still does not ship an installer, binary release, archive, package release or executable launcher.

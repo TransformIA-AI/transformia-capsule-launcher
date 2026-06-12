@@ -272,7 +272,9 @@ addIssue(pkg.license === "SEE LICENSE IN LICENSE.md", "package.json license must
 addIssue(Boolean(pkg.scripts?.["validate:bootstrap-context"]), "package.json must include validate:bootstrap-context");
 addIssue(Boolean(pkg.scripts?.["validate:launcher-public-repo-strategy"]), "package.json must include validate:launcher-public-repo-strategy");
 addIssue(
-  pkg.scripts?.quality === "npm run -s validate:bootstrap-context && npm run -s validate:launcher-public-repo-strategy",
+  typeof pkg.scripts?.quality === "string"
+    && pkg.scripts.quality.includes("npm run -s validate:bootstrap-context")
+    && pkg.scripts.quality.includes("npm run -s validate:launcher-public-repo-strategy"),
   "package.json quality must run bootstrap and C01 validator"
 );
 

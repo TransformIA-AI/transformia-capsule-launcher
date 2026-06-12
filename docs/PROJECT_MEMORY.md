@@ -29,8 +29,8 @@ v0.6-C - Public Capsule Launcher and Downloads
 ## Next Atlas PR
 
 ```text
-v0.6-C01
-docs(launcher): define Capsule Launcher public repo strategy
+v0.6-C03
+feat(templates): add public Capsule template manifests
 ```
 
 ## Strategic interpretation
@@ -45,7 +45,7 @@ Do not leak private runtime internals into this public repo.
 
 Do not imply production readiness before the installer/download path exists.
 
-Do not implement cloud, Stripe, auth, DB, telemetry, connector execution or live automation in C01.
+Do not implement cloud, Stripe, auth, DB, telemetry, connector execution or live automation in C02.
 
 
 ## License posture
@@ -63,3 +63,12 @@ Default rule: all rights reserved except limited evaluation/contribution rights 
 - C01 formalizes the public repo strategy before quickstart, public templates, installer or download work.
 - Private core remains private: no private runtime source, customer material, secrets, connector workflows or proprietary orchestration logic belongs here.
 - Next C02 should add README, quickstart and install-promise guidance without claiming an installer or exposing private runtime internals.
+
+
+## v0.6-C02 memory
+
+- C01 merged and formalized the public repo strategy.
+- C02 upgrades README, quickstart and install promise docs for day-1 repo usefulness.
+- No installer, binary or private runtime exists in this repository yet.
+- P1/P2 learnings are embedded into validators: tracked text scanning, matching-line-only negation, PR-base changed-file detection and license/IP posture protection.
+- Next C03 should add public Capsule template manifests without private runtime material, customer data, secrets or live connector execution.
