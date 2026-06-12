@@ -2,20 +2,21 @@
 
 Prepare the public local/BYOK path for governed AI work capsules, with a clear handoff to TransformIA Cloud.
 
-[status: v0.6-C04] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: config scaffold only] [templates: manifest only]
+[status: v0.6-C05] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: config scaffold only] [templates: manifest only] [launch assets: draft copy only]
 
 TransformIA Capsule Launcher is the public distribution, onboarding and download surface for TransformIA Capsule. It makes the local/BYOK path understandable without exposing the private TransformIA runtime, Exocortex core, customer material, production connector workflows or proprietary orchestration logic.
 
 ## Day-1 status
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config scaffold
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
 - Public launcher distribution surface.
-- Docs, validation, quickstart promise, public template manifests and local/BYOK config placeholders are available for first visitors.
+- Docs, validation, quickstart promise, public template manifests, local/BYOK config placeholders and draft launch assets are available for first visitors.
 - Five public-safe Capsule template manifests are available as manifest-only previews.
+- Product Hunt, GitHub, X and LinkedIn launch drafts exist as copy assets only; no launch has been executed by this repository.
 - `.env.example` exists as placeholder-only documentation; real secrets must never be committed.
 - No executable launcher yet.
 - No installer yet.
@@ -34,7 +35,7 @@ cd transformia-capsule-launcher
 npm run -s quality
 ```
 
-That command validates the bootstrap context, the C01 public repo strategy, the C02 README/quickstart/install-promise boundary, the C03 public template manifest boundary and the C04 local/BYOK config scaffold. It does not ask for API keys, does not create a real `.env` file, does not clone a private runtime and does not configure connectors.
+That command validates the bootstrap context, the C01 public repo strategy, the C02 README/quickstart/install-promise boundary, the C03 public template manifest boundary, the C04 local/BYOK config scaffold and the C05 launch assets boundary. It does not ask for API keys, does not create a real `.env` file, does not clone a private runtime and does not configure connectors.
 
 For step-by-step guidance, see [`QUICKSTART.md`](QUICKSTART.md).
 
@@ -59,6 +60,12 @@ For step-by-step guidance, see [`QUICKSTART.md`](QUICKSTART.md).
 - Not a payment, Stripe, checkout, customer portal, auth, database, telemetry, analytics or cloud-sync implementation.
 - Not a place for customer data, secrets, raw evidence, private workflows, internal runbooks, private prompts or proprietary runtime internals.
 
+
+## Launch assets
+
+C05 adds draft launch assets for Product Hunt, GitHub, X and LinkedIn. No launch has been executed by this repository, and the Product Hunt/X/LinkedIn drafts are copy assets only.
+
+Claims remain source-available/IP-safe and must be reviewed before public posting or submission. See [`launch/README.md`](launch/README.md).
 
 ## Local/BYOK config scaffold
 
@@ -130,12 +137,16 @@ docs/PUBLIC_TEMPLATES_BOUNDARY.md              future public template safety bou
 docs/INSTALL_PROMISE_BOUNDARY.md               install promise boundary
 docs/LOCAL_BYOK_QUICKSTART.md                  future local/BYOK control path
 docs/CLOUD_HANDOFF_BOUNDARY.md                 future TransformIA Cloud handoff boundary
+docs/LAUNCH_ASSETS_BOUNDARY.md                 C05 launch assets boundary
 docs/GIF_PLACEHOLDER_PLAN.md                   future GIF placeholder plan
 docs/README_BADGES_AND_DISCOVERY.md            truthful badges and discovery posture
+launch/README.md                               C05 draft launch assets guide
 scripts/validate-bootstrap-context.mjs         bootstrap validator
 scripts/validate-launcher-public-repo-strategy.mjs C01 validator
 scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs C02 validator
 scripts/validate-launcher-c03-public-template-manifests.mjs C03 validator
+scripts/validate-launcher-c04-local-byok-config-scaffold.mjs C04 validator
+scripts/validate-launcher-c05-launch-assets.mjs C05 validator
 templates/README.md                            public templates boundary README
 templates/manifests/README.md                  public manifest folder guide
 templates/manifests/template-manifest.schema.json public manifest schema
@@ -151,6 +162,8 @@ npm run -s validate:bootstrap-context
 npm run -s validate:launcher-public-repo-strategy
 npm run -s validate:launcher-c02-readme-quickstart-install-promise
 npm run -s validate:launcher-c03-public-template-manifests
+npm run -s validate:launcher-c04-local-byok-config-scaffold
+npm run -s validate:launcher-c05-launch-assets
 npm run -s quality
 git diff --check
 git status --short
@@ -163,6 +176,8 @@ node scripts/validate-bootstrap-context.mjs
 node scripts/validate-launcher-public-repo-strategy.mjs
 node scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs
 node scripts/validate-launcher-c03-public-template-manifests.mjs
+node scripts/validate-launcher-c04-local-byok-config-scaffold.mjs
+node scripts/validate-launcher-c05-launch-assets.mjs
 ```
 
 ## Roadmap
@@ -170,8 +185,8 @@ node scripts/validate-launcher-c03-public-template-manifests.mjs
 Current Atlas milestone:
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config scaffold
+v0.6-C05
+docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
 Previous completed milestones:
@@ -179,17 +194,17 @@ Previous completed milestones:
 - v0.6-C01: public repo strategy.
 - v0.6-C02: README / quickstart / install promise.
 - v0.6-C03: public template manifests.
+- v0.6-C04: local/BYOK config scaffold.
 
 Next Atlas PR:
 
 ```text
-v0.6-C05
-docs(launch): add Product Hunt, GitHub and X launch assets
+v0.6-C06
+feat(web): add download and launcher CTA surface
 ```
 
 Expected future sequence:
 
-- C05: launch assets.
 - C06: web download / launcher CTA surface.
 - C07: shareable template pages.
 - C08: referral / powered-by loop.

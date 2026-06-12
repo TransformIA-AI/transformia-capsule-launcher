@@ -33,17 +33,17 @@
 ## Current PR
 
 ```text
-v0.6-C04
-feat(config): add local/BYOK config scaffold
-```
-
-C04 is docs, config-contract, validation and package-script scope. It adds a placeholder-only local/BYOK config scaffold without shipping an executable launcher, installer, binary, private runtime, provider execution, connector execution, payment, auth, DB, telemetry or Cloud sync.
-
-## After merge, next PR
-
-```text
 v0.6-C05
 docs(launch): add Product Hunt, GitHub and X launch assets
 ```
 
-C05 should keep launch assets honest, source-available/IP safe and explicit that launcher execution, provider setup, installer packaging and private runtime remain absent until implemented and approved.
+C05 is docs, launch-copy, validation and package-script scope. It adds Product Hunt, GitHub, X, LinkedIn and demo narrative launch assets without posting, submitting, tracking, shipping an executable launcher, installer, binary, private runtime, provider execution, connector execution, payment, auth, DB, telemetry or Cloud sync.
+
+## After merge, next PR
+
+```text
+v0.6-C06
+feat(web): add download and launcher CTA surface
+```
+
+C06 should connect web/download CTA surfaces honestly and keep launcher execution, provider setup, installer packaging and private runtime absent unless implemented and approved.
