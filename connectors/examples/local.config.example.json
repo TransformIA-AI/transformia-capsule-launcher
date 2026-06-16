@@ -1,0 +1,9 @@
+{
+  "tenantAlias": "local-demo",
+  "selectedTemplate": "restaurant",
+  "enabledConnectors": [
+    "google-calendar",
+    "whatsapp-template-manager"
+  ],
+  "cloudHandoffUrl": "https://transformia.example/connect-capsule-cloud"
+}

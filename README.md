@@ -72,6 +72,18 @@ Current manifest previews live in [`templates/manifests`](templates/manifests):
 
 Read the catalog in [`docs/TEMPLATE_MANIFEST_CATALOG.md`](docs/TEMPLATE_MANIFEST_CATALOG.md).
 
+
+## Connector Kits preview
+
+The v0.7-A03 Connector Kits preview publishes a public-safe connector catalog and Install Doctor shell. See [`connectors/README.md`](connectors/README.md).
+
+```bash
+npm run -s validate:connector-manifests
+npm run -s doctor
+```
+
+Real provider connections happen through Capsule Cloud, not this public launcher. The launcher explains kit readiness, validates manifests and keeps provider credentials outside the repo.
+
 ## Local/BYOK config scaffold
 
 The local/BYOK config scaffold is documented in [`config/README.md`](config/README.md) and [`docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`](docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md). It is placeholder-only and non-executable.

@@ -1,0 +1,20 @@
+{
+  "connectorId": "hubspot",
+  "displayName": "HubSpot",
+  "displayNameEs": "HubSpot",
+  "category": "crm",
+  "authType": "oauth2_pkce",
+  "launchPriority": "secondary",
+  "status": "coming_soon",
+  "allowedActions": ["Preview CRM handoff requirements", "Plan field mapping review"],
+  "requiresApprovalActions": ["Create CRM records", "Update CRM records", "Sync contacts"],
+  "riskLevel": "medium",
+  "rollbackStrategy": "No launcher rollback is needed because this manifest is a non-operational preview.",
+  "doctorMessageRefs": ["connector_not_supported_yet", "mapping_required", "cloud_handoff_required"],
+  "localConfigRequirements": ["tenantAlias", "selectedTemplate"],
+  "cloudRequired": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true
+}
