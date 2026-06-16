@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
 const root = process.cwd();
-const manifestIds = ['google-calendar','whatsapp-template-manager','hubspot','calendly','airtable','google-sheets'];
+const manifestDir = 'connectors/manifests';
+const canonicalManifestIds = ['google-calendar','whatsapp-template-manager','hubspot','calendly','airtable','google-sheets'];
 const primaryIds = new Set(['google-calendar','whatsapp-template-manager']);
 const nonPrimaryIds = ['hubspot','calendly','airtable','google-sheets'];
 const requiredFields = ['connectorId','displayName','displayNameEs','category','authType','launchPriority','status','allowedActions','requiresApprovalActions','riskLevel','rollbackStrategy','doctorMessageRefs','localConfigRequirements','cloudRequired','publicSafe','noSecretsIncluded','noProviderCall','noLiveExecution'];
@@ -25,6 +26,107 @@ let failures = [];
 const fail = (message) => failures.push(message);
 const read = (path) => readFileSync(join(root, path), 'utf8');
 const parseJson = (path) => JSON.parse(read(path));
+const manifestPathFor = (file) => `${manifestDir}/${file}`;
+
+function listManifestFiles() {
+  if (!existsSync(join(root, manifestDir))) return [];
+  return readdirSync(join(root, manifestDir))
+    .filter((file) => file.endsWith('.json'))
+    .sort();
+}
+
+function validateManifestRecord({ file, raw, manifest, seenConnectorIds, messageMap, collect = fail }) {
+  const path = manifestPathFor(file);
+  const expectedConnectorId = basename(file, '.json');
+
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(raw)) collect(`${path} contains forbidden secret/live/provider wording: ${pattern}`);
+  }
+  for (const field of requiredFields) {
+    if (!(field in manifest)) collect(`${path} missing ${field}`);
+  }
+  if (manifest.connectorId !== expectedConnectorId) collect(`${path} connectorId must match filename (${expectedConnectorId})`);
+  if (seenConnectorIds.has(manifest.connectorId)) collect(`${path} duplicates connectorId ${manifest.connectorId}`);
+  seenConnectorIds.add(manifest.connectorId);
+  if (!categories.has(manifest.category)) collect(`${manifest.connectorId} has invalid category`);
+  if (!authTypes.has(manifest.authType)) collect(`${manifest.connectorId} has invalid authType`);
+  if (!priorities.has(manifest.launchPriority)) collect(`${manifest.connectorId} has invalid launchPriority`);
+  if (!statuses.has(manifest.status)) collect(`${manifest.connectorId} has invalid status`);
+  if (primaryIds.has(manifest.connectorId) && manifest.launchPriority !== 'v0_7_primary') collect(`${manifest.connectorId} must be v0_7_primary`);
+  if (nonPrimaryIds.includes(manifest.connectorId) && manifest.launchPriority === 'v0_7_primary') collect(`${manifest.connectorId} must not be primary for v0.7-A03`);
+  if (nonPrimaryIds.includes(manifest.connectorId) && manifest.status === 'available_for_cloud_setup') collect(`${manifest.connectorId} must not be operational in v0.7-A03`);
+  for (const booleanField of ['publicSafe','noSecretsIncluded','noProviderCall','noLiveExecution']) {
+    if (manifest[booleanField] !== true) collect(`${manifest.connectorId} must set ${booleanField}: true`);
+  }
+  if (!Array.isArray(manifest.doctorMessageRefs)) collect(`${manifest.connectorId} doctorMessageRefs must be an array`);
+  for (const ref of manifest.doctorMessageRefs ?? []) {
+    if (!messageMap.has(ref)) collect(`${manifest.connectorId} references missing doctor message ${ref}`);
+  }
+}
+
+function sampleManifest(overrides = {}) {
+  return {
+    connectorId: 'synthetic-extra',
+    displayName: 'Synthetic Extra',
+    displayNameEs: 'Synthetic Extra',
+    category: 'storage',
+    authType: 'contract_only',
+    launchPriority: 'coming_soon',
+    status: 'coming_soon',
+    allowedActions: ['Preview safe setup'],
+    requiresApprovalActions: ['Perform governed action'],
+    riskLevel: 'low',
+    rollbackStrategy: 'No launcher rollback is needed for this synthetic validation case.',
+    doctorMessageRefs: ['connector_not_supported_yet'],
+    localConfigRequirements: ['tenantAlias'],
+    cloudRequired: true,
+    publicSafe: true,
+    noSecretsIncluded: true,
+    noProviderCall: true,
+    noLiveExecution: true,
+    ...overrides
+  };
+}
+
+function assertSyntheticManifestGuards(messageMap) {
+  const cases = [
+    {
+      name: 'extra manifest containing forbidden token wording',
+      file: 'synthetic-extra.json',
+      manifest: sampleManifest({ allowedActions: ['accessToken must never appear'] }),
+      expected: 'forbidden secret/live/provider wording'
+    },
+    {
+      name: 'duplicate connectorId',
+      file: 'synthetic-extra.json',
+      manifest: sampleManifest({ connectorId: 'google-calendar' }),
+      seenConnectorIds: new Set(['google-calendar']),
+      expected: 'duplicates connectorId'
+    },
+    {
+      name: 'filename connectorId mismatch',
+      file: 'different-name.json',
+      manifest: sampleManifest({ connectorId: 'synthetic-extra' }),
+      expected: 'connectorId must match filename'
+    }
+  ];
+
+  for (const testCase of cases) {
+    const syntheticFailures = [];
+    const raw = JSON.stringify(testCase.manifest);
+    validateManifestRecord({
+      file: testCase.file,
+      raw,
+      manifest: testCase.manifest,
+      seenConnectorIds: testCase.seenConnectorIds ?? new Set(),
+      messageMap,
+      collect: (message) => syntheticFailures.push(message)
+    });
+    if (!syntheticFailures.some((message) => message.includes(testCase.expected))) {
+      fail(`synthetic guard failed for ${testCase.name}`);
+    }
+  }
+}
 
 for (const path of ['connectors/README.md','connectors/doctor/doctor-messages.json','connectors/examples/local.config.example.json','scripts/doctor.mjs']) {
   if (!existsSync(join(root, path))) fail(`${path} is missing`);
@@ -44,34 +146,21 @@ for (const message of messages) {
   if (message.publicSafe !== true || message.containsRawPii !== false || message.containsSecrets !== false) fail(`doctor message ${message.errorCode} is not public-safe`);
 }
 
-for (const id of manifestIds) {
-  const path = `connectors/manifests/${id}.json`;
-  if (!existsSync(join(root, path))) { fail(`${path} is missing`); continue; }
+const manifestFiles = listManifestFiles();
+if (!manifestFiles.length) fail('connectors/manifests/*.json is empty or missing');
+for (const id of canonicalManifestIds) {
+  if (!manifestFiles.includes(`${id}.json`)) fail(`required canonical manifest ${id}.json is missing`);
+}
+
+const seenConnectorIds = new Set();
+for (const file of manifestFiles) {
+  const path = manifestPathFor(file);
   const raw = read(path);
-  for (const pattern of forbiddenPatterns) {
-    if (pattern.test(raw)) fail(`${path} contains forbidden secret/live/provider wording: ${pattern}`);
-  }
   let manifest;
   try { manifest = JSON.parse(raw); } catch { fail(`${path} is invalid JSON`); continue; }
-  for (const field of requiredFields) {
-    if (!(field in manifest)) fail(`${path} missing ${field}`);
-  }
-  if (manifest.connectorId !== id) fail(`${path} connectorId must be ${id}`);
-  if (!categories.has(manifest.category)) fail(`${id} has invalid category`);
-  if (!authTypes.has(manifest.authType)) fail(`${id} has invalid authType`);
-  if (!priorities.has(manifest.launchPriority)) fail(`${id} has invalid launchPriority`);
-  if (!statuses.has(manifest.status)) fail(`${id} has invalid status`);
-  if (primaryIds.has(id) && manifest.launchPriority !== 'v0_7_primary') fail(`${id} must be v0_7_primary`);
-  if (nonPrimaryIds.includes(id) && manifest.launchPriority === 'v0_7_primary') fail(`${id} must not be primary for v0.7-A03`);
-  if (nonPrimaryIds.includes(id) && manifest.status === 'available_for_cloud_setup') fail(`${id} must not be operational in v0.7-A03`);
-  for (const booleanField of ['publicSafe','noSecretsIncluded','noProviderCall','noLiveExecution']) {
-    if (manifest[booleanField] !== true) fail(`${id} must set ${booleanField}: true`);
-  }
-  if (!Array.isArray(manifest.doctorMessageRefs)) fail(`${id} doctorMessageRefs must be an array`);
-  for (const ref of manifest.doctorMessageRefs ?? []) {
-    if (!messageMap.has(ref)) fail(`${id} references missing doctor message ${ref}`);
-  }
+  validateManifestRecord({ file, raw, manifest, seenConnectorIds, messageMap });
 }
+assertSyntheticManifestGuards(messageMap);
 
 const connectorReadme = existsSync(join(root, 'connectors/README.md')) ? read('connectors/README.md') : '';
 for (const phrase of ['Connector Kits','What this catalog is','What this catalog is not','Primary v0.7 connectors','Secondary/stretch connectors','How Install Doctor works','Local/BYOK vs Capsule Cloud','Security posture','No secrets in this repo','No provider calls from this launcher','Future v0.7-B OAuth handoff','Future Restaurant Golden Kit','Connector manifests describe installable capabilities. They do not prove a connector is connected, healthy or installed.']) {
@@ -83,7 +172,12 @@ if (pkg.scripts?.['validate:connector-manifests'] !== 'node scripts/validate-con
 if (pkg.scripts?.doctor !== 'node scripts/doctor.mjs') fail('package.json missing doctor script');
 if (!pkg.scripts?.quality?.includes('validate:connector-manifests')) fail('quality script must include validate:connector-manifests');
 
-const scannedFiles = ['connectors/README.md','connectors/doctor/doctor-messages.json','connectors/examples/local.config.example.json','scripts/doctor.mjs', ...manifestIds.map((id) => `connectors/manifests/${id}.json`)];
+const doctorSource = read('scripts/doctor.mjs');
+for (const requiredDoctorSnippet of ['enabledConnectors', 'localConfigRequirements', 'manifestById', 'safeKeyName', 'safeConnectorLabel']) {
+  if (!doctorSource.includes(requiredDoctorSnippet)) fail(`doctor.mjs must validate local config requirements: missing ${requiredDoctorSnippet}`);
+}
+
+const scannedFiles = ['connectors/README.md','connectors/doctor/doctor-messages.json','connectors/examples/local.config.example.json','scripts/doctor.mjs', ...manifestFiles.map((file) => manifestPathFor(file))];
 for (const path of scannedFiles) {
   if (!existsSync(join(root, path))) continue;
   const raw = read(path);
@@ -97,4 +191,4 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log('Connector manifest validation OK.');
+console.log(`Connector manifest validation OK. Scanned ${manifestFiles.length} manifest files.`);

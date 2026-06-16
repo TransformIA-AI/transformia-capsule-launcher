@@ -6,6 +6,7 @@ const manifestDir = join(root, 'connectors', 'manifests');
 const messagesPath = join(root, 'connectors', 'doctor', 'doctor-messages.json');
 const defaultConfigPath = join(root, 'connectors', 'examples', 'local.config.example.json');
 const suppliedConfigPath = process.argv[2] ? resolve(process.argv[2]) : defaultConfigPath;
+const unsafeConfigKeyPattern = /token|secret|apiKey|webhook|credential|password|provider|account|tenantId/i;
 
 function readJson(path, label) {
   try {
@@ -16,21 +17,36 @@ function readJson(path, label) {
   }
 }
 
+function loadManifests() {
+  return readdirSync(manifestDir)
+    .filter((file) => file.endsWith('.json'))
+    .sort()
+    .map((file) => readJson(join(manifestDir, file), `manifest ${file}`));
+}
+
+function safeKeyName(key) {
+  return typeof key === 'string' && !unsafeConfigKeyPattern.test(key) ? key : 'configuración segura requerida';
+}
+
+function safeConnectorLabel(connectorId) {
+  return typeof connectorId === 'string' && /^[a-z0-9-]+$/.test(connectorId) && !unsafeConfigKeyPattern.test(connectorId)
+    ? connectorId
+    : 'conector no reconocido';
+}
+
 if (!existsSync(manifestDir) || !existsSync(messagesPath)) {
   console.error('Install Doctor no puede encontrar el catálogo público de conectores.');
   process.exit(1);
 }
 
-const manifests = readdirSync(manifestDir)
-  .filter((file) => file.endsWith('.json'))
-  .sort()
-  .map((file) => readJson(join(manifestDir, file), `manifest ${file}`));
+const manifests = loadManifests();
+const manifestById = new Map(manifests.map((manifest) => [manifest.connectorId, manifest]));
 const messages = readJson(messagesPath, 'mensajes Doctor');
 const messageCodes = new Set(messages.map((message) => message.errorCode));
 const structuralErrors = [];
 
 for (const manifest of manifests) {
-  for (const field of ['connectorId','displayName','launchPriority','status','doctorMessageRefs','publicSafe','noSecretsIncluded','noProviderCall','noLiveExecution']) {
+  for (const field of ['connectorId','displayName','launchPriority','status','doctorMessageRefs','localConfigRequirements','publicSafe','noSecretsIncluded','noProviderCall','noLiveExecution']) {
     if (!(field in manifest)) structuralErrors.push(`${manifest.connectorId ?? 'manifest'}: falta ${field}`);
   }
   for (const ref of manifest.doctorMessageRefs ?? []) {
@@ -58,8 +74,27 @@ if (existsSync(suppliedConfigPath)) {
 
 if (config) {
   const enabled = Array.isArray(config.enabledConnectors) ? config.enabledConnectors : [];
-  console.log(`Configuración local de ejemplo detectada para plantilla: ${config.selectedTemplate ?? 'sin plantilla'}.`);
+  console.log(`Configuración local detectada para plantilla: ${config.selectedTemplate ? 'configurada' : 'sin plantilla'}.`);
   if (!enabled.length) console.log('Falta elegir conectores en la configuración local.');
+
+  for (const connectorId of enabled) {
+    const manifest = manifestById.get(connectorId);
+    if (!manifest) {
+      console.log(`El conector "${safeConnectorLabel(connectorId)}" no está soportado por este catálogo público. Revisa el siguiente pack o usa Capsule Cloud.`);
+      continue;
+    }
+
+    const missingKeys = (manifest.localConfigRequirements ?? [])
+      .filter((key) => !(key in config))
+      .map(safeKeyName);
+
+    if (missingKeys.length) {
+      console.log(`${manifest.displayName}: falta configuración local para ${missingKeys.join(', ')}.`);
+      console.log('Puedes completar la configuración local o usar Capsule Cloud para conectar proveedores reales.');
+    } else {
+      console.log(`${manifest.displayName}: configuración local requerida presente.`);
+    }
+  }
 }
 
 for (const manifest of manifests) {
