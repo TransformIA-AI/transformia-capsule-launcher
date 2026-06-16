@@ -1,0 +1,20 @@
+{
+  "connectorId": "airtable",
+  "displayName": "Airtable",
+  "displayNameEs": "Airtable",
+  "category": "storage",
+  "authType": "apikey",
+  "launchPriority": "stretch",
+  "status": "stretch",
+  "allowedActions": ["Preview table handoff requirements", "Plan mapping review"],
+  "requiresApprovalActions": ["Create records", "Update records", "Attach customer files"],
+  "riskLevel": "medium",
+  "rollbackStrategy": "No launcher rollback is needed because this manifest is a stretch preview.",
+  "doctorMessageRefs": ["connector_not_supported_yet", "mapping_required", "cloud_handoff_required"],
+  "localConfigRequirements": ["tenantAlias", "selectedTemplate"],
+  "cloudRequired": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true
+}

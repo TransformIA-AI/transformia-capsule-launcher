@@ -1,0 +1,20 @@
+{
+  "connectorId": "google-sheets",
+  "displayName": "Google Sheets",
+  "displayNameEs": "Hojas de cálculo de Google",
+  "category": "storage",
+  "authType": "oauth2_pkce",
+  "launchPriority": "coming_soon",
+  "status": "coming_soon",
+  "allowedActions": ["Preview spreadsheet handoff requirements", "Plan column mapping review"],
+  "requiresApprovalActions": ["Create rows", "Update rows", "Share spreadsheets"],
+  "riskLevel": "medium",
+  "rollbackStrategy": "No launcher rollback is needed because this manifest is a coming-soon preview.",
+  "doctorMessageRefs": ["connector_not_supported_yet", "mapping_required", "cloud_handoff_required"],
+  "localConfigRequirements": ["tenantAlias", "selectedTemplate"],
+  "cloudRequired": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true
+}

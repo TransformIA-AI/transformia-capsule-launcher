@@ -1,0 +1,41 @@
+{
+  "connectorId": "google-calendar",
+  "displayName": "Google Calendar",
+  "displayNameEs": "Google Calendar",
+  "category": "calendar",
+  "authType": "oauth2_pkce",
+  "launchPriority": "v0_7_primary",
+  "status": "available_for_cloud_setup",
+  "allowedActions": [
+    "Review calendar availability summary",
+    "Prepare event draft handoff",
+    "Map appointment context for governed review"
+  ],
+  "requiresApprovalActions": [
+    "Create or change calendar events",
+    "Invite external attendees",
+    "Publish booking updates"
+  ],
+  "riskLevel": "medium",
+  "rollbackStrategy": "Use Capsule Cloud handoff to disconnect provider access and keep launcher manifests unchanged.",
+  "doctorMessageRefs": [
+    "pending_auth",
+    "auth_expired",
+    "missing_permission",
+    "provider_temporarily_unavailable",
+    "event_type_required",
+    "local_config_missing",
+    "cloud_handoff_required"
+  ],
+  "localConfigRequirements": [
+    "tenantAlias",
+    "selectedTemplate",
+    "enabledConnectors",
+    "cloudHandoffUrl"
+  ],
+  "cloudRequired": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true
+}

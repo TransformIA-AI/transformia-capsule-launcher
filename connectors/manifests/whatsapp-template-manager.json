@@ -1,0 +1,41 @@
+{
+  "connectorId": "whatsapp-template-manager",
+  "displayName": "WhatsApp Template Manager",
+  "displayNameEs": "Gestor de plantillas de WhatsApp",
+  "category": "messaging",
+  "authType": "contract_only",
+  "launchPriority": "v0_7_primary",
+  "status": "available_for_cloud_setup",
+  "allowedActions": [
+    "Review template readiness summary",
+    "Prepare template selection handoff",
+    "Map approved customer-message categories"
+  ],
+  "requiresApprovalActions": [
+    "Submit templates for provider review",
+    "Change approved template copy",
+    "Send outbound customer messages"
+  ],
+  "riskLevel": "high",
+  "rollbackStrategy": "Use Capsule Cloud handoff to pause template usage and keep launcher manifests unchanged.",
+  "doctorMessageRefs": [
+    "template_pending_approval",
+    "template_rejected",
+    "missing_permission",
+    "rate_limited",
+    "plan_upgrade_required",
+    "local_config_missing",
+    "cloud_handoff_required"
+  ],
+  "localConfigRequirements": [
+    "tenantAlias",
+    "selectedTemplate",
+    "enabledConnectors",
+    "cloudHandoffUrl"
+  ],
+  "cloudRequired": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true
+}

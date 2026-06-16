@@ -1,0 +1,20 @@
+{
+  "connectorId": "calendly",
+  "displayName": "Calendly",
+  "displayNameEs": "Calendly",
+  "category": "booking",
+  "authType": "oauth2_pkce",
+  "launchPriority": "secondary",
+  "status": "coming_soon",
+  "allowedActions": ["Preview booking handoff requirements", "Plan event-type selection"],
+  "requiresApprovalActions": ["Create booking links", "Change event types", "Create bookings"],
+  "riskLevel": "medium",
+  "rollbackStrategy": "No launcher rollback is needed because this manifest is a non-operational preview.",
+  "doctorMessageRefs": ["connector_not_supported_yet", "event_type_required", "cloud_handoff_required"],
+  "localConfigRequirements": ["tenantAlias", "selectedTemplate"],
+  "cloudRequired": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true
+}
