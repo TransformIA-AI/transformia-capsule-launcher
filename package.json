@@ -11,7 +11,8 @@
     "validate:launcher-c02-readme-quickstart-install-promise": "node scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs",
     "validate:launcher-c03-public-template-manifests": "node scripts/validate-launcher-c03-public-template-manifests.mjs",
     "validate:launcher-c04-local-byok-config-scaffold": "node scripts/validate-launcher-c04-local-byok-config-scaffold.mjs",
-    "validate:launcher-c05-launch-assets": "node scripts/validate-launcher-c05-launch-assets.mjs"
+    "validate:launcher-c05-launch-assets": "node scripts/validate-launcher-c05-launch-assets.mjs",
+    "validate:launch-docs": "node scripts/validate-launch-docs.mjs"
   },
   "license": "SEE LICENSE IN LICENSE.md"
 }

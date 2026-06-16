@@ -1,33 +1,46 @@
 # TransformIA Capsule Launcher
 
-Prepare the public local/BYOK path for governed AI work capsules, with a clear handoff to TransformIA Cloud.
+Public source-available launcher surface for evaluating governed AI work capsules with local/BYOK control clarity, safe template previews and a future TransformIA Cloud handoff.
 
-[status: v0.6-C05] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: config scaffold only] [templates: manifest only] [launch assets: draft copy only]
+[status: v0.6-C05] [license: source-available] [private core: not included] [installer: promise only] [local/BYOK: config scaffold only]
 
-TransformIA Capsule Launcher is the public distribution, onboarding and download surface for TransformIA Capsule. It makes the local/BYOK path understandable without exposing the private TransformIA runtime, Exocortex core, customer material, production connector workflows or proprietary orchestration logic.
+[![status](https://img.shields.io/badge/status-v0.6_H02%2BH07-blue)](#roadmap)
+[![license](https://img.shields.io/badge/license-source--available-orange)](LICENSE.md)
+[![private core](https://img.shields.io/badge/private_core-not_included-lightgrey)](#what-it-does-not-do)
+[![local/BYOK](https://img.shields.io/badge/local%2FBYOK-guidance-green)](#local--byok-posture)
+[![templates](https://img.shields.io/badge/templates-manifest_previews-purple)](#templates-available)
 
-## Day-1 status
+## Preflight lineage
 
-```text
-v0.6-C05
-docs(launch): add Product Hunt, GitHub and X launch assets
-```
+Bootstrap context only is preserved as the safety baseline, with inherited strategy from `v0.6-C01` before this `v0.6-H02 + v0.6-H07` launch capability pack.
 
-- Public launcher distribution surface.
-- Docs, validation, quickstart promise, public template manifests, local/BYOK config placeholders and draft launch assets are available for first visitors.
-- Five public-safe Capsule template manifests are available as manifest-only previews.
-- Product Hunt, GitHub, X and LinkedIn launch drafts exist as copy assets only; no launch has been executed by this repository.
-- `.env.example` exists as placeholder-only documentation; real secrets must never be committed.
-- No executable launcher yet.
-- No installer yet.
-- No private runtime included.
-- C01 public repo strategy and C02 README/quickstart/install-promise boundaries remain the foundation.
-- Bootstrap context only has been superseded by the C01/C02 public launcher docs while preserving bootstrap safety checks.
-- Inherited foundation: v0.6-C01 docs(launcher): define Capsule Launcher public repo strategy.
+## One-liner
 
-## Quickstart under 5 minutes
+TransformIA Capsule Launcher is the public GitHub-ready entry point for understanding, cloning and validating the TransformIA Capsule onboarding surface while making clear that private runtime/core is not included and that private core code, customer data and live connector execution stay out of this repository.
 
-Prerequisites: Git, Node.js 20+ or compatible modern Node, and npm.
+## What it does
+
+- Explains the public launcher role for TransformIA Capsule.
+- Provides a quick clone-and-validate path for first visitors.
+- Documents source-available license posture and public-safe boundaries.
+- Lists public-safe template manifest previews for future Capsule use cases.
+- Describes the local/BYOK posture without asking for real credentials.
+- Gives a future Cloud Trial handoff path without implementing Cloud features.
+- Maintains validators that protect against false launch, install, payment, connector and private-core claims.
+- Provides Product Hunt and GitHub launch-kit documentation for human-reviewed launch preparation.
+
+## What it does not do
+
+- It does not include private TransformIA core code, proprietary orchestration logic, internal prompts, customer material, raw evidence or production workflows.
+- It does not execute Capsules, connectors, provider calls, automations, payments, subscriptions, auth, telemetry, databases or cloud sync.
+- It does not ship an installer, binary release, archive, package release or one-click setup.
+- It does not claim compliance certification, ROI guarantees, unrestricted commercial rights or unrestricted redistribution rights.
+- It does not ask for API keys or store secrets.
+- It does not authorize dangerous automation or unsupervised execution.
+
+## Quickstart in under 5 minutes
+
+Prerequisites: Git, Node.js 20+ or a compatible modern Node runtime, and npm.
 
 ```bash
 git clone https://github.com/TransformIA-AI/transformia-capsule-launcher.git
@@ -35,186 +48,118 @@ cd transformia-capsule-launcher
 npm run -s quality
 ```
 
-That command validates the bootstrap context, the C01 public repo strategy, the C02 README/quickstart/install-promise boundary, the C03 public template manifest boundary, the C04 local/BYOK config scaffold and the C05 launch assets boundary. It does not ask for API keys, does not create a real `.env` file, does not clone a private runtime and does not configure connectors.
+Expected result: validators confirm the public launcher docs, template manifests, local/BYOK placeholders and launch assets are internally consistent.
 
-For step-by-step guidance, see [`QUICKSTART.md`](QUICKSTART.md).
+This quickstart is deliberately validation-only. It does not create a real `.env` file, request credentials, configure providers, clone private code or execute connectors.
 
-## What this repository is
-
-- The public distribution and onboarding shell for TransformIA Capsule Launcher.
-- The day-1 README, quickstart, install-promise and validation surface.
-- The public-safe place for sanitized Capsule template manifests.
-- The documentation boundary for local/BYOK onboarding and future Cloud handoff.
-- A validator-protected surface that blocks false production, install, payment, cloud and private-core claims.
-
-## What this repository is not
-
-- Not the private TransformIA runtime or Exocortex core.
-- Not a bundled private core. The private runtime/core is not included.
-- Not an executable launcher in C04.
-- Not a working installer in C04.
-- Not a binary release, archive or package release in C04.
-- Not active local capsule execution in C04.
-- Not a configured BYOK provider path in C04.
-- Not a connector execution system.
-- Not a payment, Stripe, checkout, customer portal, auth, database, telemetry, analytics or cloud-sync implementation.
-- Not a place for customer data, secrets, raw evidence, private workflows, internal runbooks, private prompts or proprietary runtime internals.
-
-
-## Launch assets
-
-C05 adds draft launch assets for Product Hunt, GitHub, X and LinkedIn. No launch has been executed by this repository, and the Product Hunt/X/LinkedIn drafts are copy assets only.
-
-Claims remain source-available/IP-safe and must be reviewed before public posting or submission. See [`launch/README.md`](launch/README.md).
-
-## Local/BYOK config scaffold
-
-C04 adds placeholder config only. The repository now shows where future local/BYOK configuration will live, but it does not enable local capsule execution.
-
-- `.env.example` exists as a placeholder sample; real secrets must never be committed.
-- `config/local-byok.config.example.json` is declarative and non-executable.
-- No local launcher execution exists yet.
-- No provider is configured.
-- No private runtime is included.
-
-See [`config/README.md`](config/README.md) and [`docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`](docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md).
+For the step-by-step path, see [`QUICKSTART.md`](QUICKSTART.md).
 
 ## Public template manifests
 
-C03 adds a manifest catalog only. These manifests are public-safe previews of future Capsule template directions. They are not executable, do not include the private runtime, do not execute connectors and do not include customer data, secrets or prompts.
+Manifest previews are not executable. They do not include customer data, secrets or prompts. See [`templates/manifests/README.md`](templates/manifests/README.md).
 
-Use the catalog to understand the first five public template directions, their business jobs, conceptual inputs, safety boundaries and future implementation requirements:
+## Templates available
 
-- [`docs/TEMPLATE_MANIFEST_CATALOG.md`](docs/TEMPLATE_MANIFEST_CATALOG.md)
-- [`templates/manifests/README.md`](templates/manifests/README.md)
+Public templates are currently manifest previews only. They describe business jobs, conceptual inputs and safety boundaries without executable connector code, customer data, secrets, prompts or runtime semantics.
 
-C03 does not change the C02 quickstart into a runnable template path. The current quickstart remains clone-and-validate only.
+Current manifest previews live in [`templates/manifests`](templates/manifests):
 
-## Local/BYOK/control promise
+- `appointment-prep-capsule.manifest.json`
+- `evidence-value-review-capsule.manifest.json`
+- `faq-knowledge-capsule.manifest.json`
+- `lead-intake-capsule.manifest.json`
+- `local-byok-starter-capsule.manifest.json`
 
-The launcher strategy is local/BYOK first: users should eventually be able to bring their own keys, keep local control and evaluate the public launcher path without committing secrets and without exposing private runtime internals.
+Read the catalog in [`docs/TEMPLATE_MANIFEST_CATALOG.md`](docs/TEMPLATE_MANIFEST_CATALOG.md).
 
-C04 adds a placeholder-only config scaffold for that promise. It does not request API keys, does not configure providers and does not add an executable launcher yet. See [`docs/LOCAL_BYOK_QUICKSTART.md`](docs/LOCAL_BYOK_QUICKSTART.md) and [`docs/BYOK_SECRET_HANDLING_BOUNDARY.md`](docs/BYOK_SECRET_HANDLING_BOUNDARY.md).
+## Local/BYOK config scaffold
 
-## Install promise boundary
+The local/BYOK config scaffold is documented in [`config/README.md`](config/README.md) and [`docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`](docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md). It is placeholder-only and non-executable.
 
-C02 makes the install promise visible, but it does not ship an installer, binary, archive, package release or executable launcher. The current install action is cloning the public repo and running validation.
+## Local / BYOK posture
 
-Future install guidance should remain under-five-minute, minimal-dependency, local/BYOK-first and explicit about what exists before claiming availability. See [`docs/INSTALL_PROMISE_BOUNDARY.md`](docs/INSTALL_PROMISE_BOUNDARY.md).
+The launcher is local/BYOK-first in posture: evaluators should understand where future local configuration will live, how secrets must be handled and what remains outside this public repo.
 
-## GIF placeholder
+Current state:
 
-The future README/demo GIF is documented as a placeholder only. C02 adds no GIF file, screenshot, binary asset or fake UI. See [`docs/GIF_PLACEHOLDER_PLAN.md`](docs/GIF_PLACEHOLDER_PLAN.md).
+- `.env.example` is placeholder-only documentation.
+- [`config/local-byok.config.example.json`](config/local-byok.config.example.json) is declarative and non-executable.
+- Real credentials must stay outside Git.
+- Provider setup and execution are future approved work, not current launcher behavior.
 
-## TransformIA Cloud handoff
+See [`docs/LOCAL_BYOK_QUICKSTART.md`](docs/LOCAL_BYOK_QUICKSTART.md) and [`docs/BYOK_SECRET_HANDLING_BOUNDARY.md`](docs/BYOK_SECRET_HANDLING_BOUNDARY.md).
 
-TransformIA Cloud is a future handoff path, not a C04 implementation. The Cloud upgrade path will be documented in future PRs and is tracked at [`docs/CLOUD_HANDOFF_BOUNDARY.md`](docs/CLOUD_HANDOFF_BOUNDARY.md).
+## Cloud Trial path
 
-C02 includes no Cloud auth, no Cloud sync, no customer portal, no subscription state, no tenant state, no payment and no Stripe flow.
+TransformIA Cloud is a future upgrade and onboarding path. This repo may describe the handoff at a public-safe level, but it does not implement Cloud auth, tenants, sync, checkout, subscription state, customer portals, telemetry or hosted execution.
 
-## Source-available/IP posture
+See [`docs/CLOUD_HANDOFF_BOUNDARY.md`](docs/CLOUD_HANDOFF_BOUNDARY.md).
 
-This repository is public source-available, not open source.
+## Security posture
 
-The operative license is `LICENSE.md`: TransformIA Capsule Launcher Source-Available Evaluation License v0.1. Public visibility does not grant production, commercial, redistribution, SaaS, white-label, managed-service, private-runtime or TransformIA branding rights.
+This repo is designed to be public-safe:
 
-See:
+- No credentials, tokens, customer workspaces, private certificates or privileged config should be committed.
+- No raw connector payloads, raw evidence, private workflows or production runbooks belong here.
+- Validators scan for false production, payment, installer, connector, secret and private-core claims.
+- Launch assets are draft copy for human review, not evidence that any public launch action has happened.
 
-```text
-LICENSE.md
-NOTICE.md
-docs/IP_AND_LICENSE_BOUNDARY.md
-```
+See [`docs/SECURITY_AND_PUBLIC_BOUNDARIES.md`](docs/SECURITY_AND_PUBLIC_BOUNDARIES.md) and [`docs/PRIVATE_CORE_BOUNDARY.md`](docs/PRIVATE_CORE_BOUNDARY.md).
 
-## Repo structure
+## Human approval / no dangerous automation by default
 
-```text
-README.md                                      day-1 public landing page
-QUICKSTART.md                                  under-five-minute clone and validate path
-docs/LAUNCHER_PUBLIC_REPO_STRATEGY.md          C01 public repo strategy
-docs/PRIVATE_CORE_BOUNDARY.md                  private runtime protection boundary
-docs/PUBLIC_TEMPLATES_BOUNDARY.md              future public template safety boundary
-docs/INSTALL_PROMISE_BOUNDARY.md               install promise boundary
-docs/LOCAL_BYOK_QUICKSTART.md                  future local/BYOK control path
-docs/CLOUD_HANDOFF_BOUNDARY.md                 future TransformIA Cloud handoff boundary
-docs/LAUNCH_ASSETS_BOUNDARY.md                 C05 launch assets boundary
-docs/GIF_PLACEHOLDER_PLAN.md                   future GIF placeholder plan
-docs/README_BADGES_AND_DISCOVERY.md            truthful badges and discovery posture
-launch/README.md                               C05 draft launch assets guide
-scripts/validate-bootstrap-context.mjs         bootstrap validator
-scripts/validate-launcher-public-repo-strategy.mjs C01 validator
-scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs C02 validator
-scripts/validate-launcher-c03-public-template-manifests.mjs C03 validator
-scripts/validate-launcher-c04-local-byok-config-scaffold.mjs C04 validator
-scripts/validate-launcher-c05-launch-assets.mjs C05 validator
-templates/README.md                            public templates boundary README
-templates/manifests/README.md                  public manifest folder guide
-templates/manifests/template-manifest.schema.json public manifest schema
-templates/manifests/*.manifest.json            public-safe manifest previews
-```
+The launcher documents and validates. It does not approve work, execute risky actions, make payments, write customer records or bypass human governance. Any future capability that changes execution, payments, auth, data persistence, connector behavior, release packaging or license posture requires explicit Dani approval in a later approved PR.
+
+## Links to TransformIA web / launch page
+
+- Public repo: `https://github.com/TransformIA-AI/transformia-capsule-launcher`
+- TransformIA web / launch page: add the final approved URL before public launch.
+- Existing launch assets guide: [`launch/README.md`](launch/README.md). No launch has been executed by this repository.
+- Product Hunt kit: [`docs/launch/PRODUCT_HUNT_LAUNCH_KIT_v0_6.md`](docs/launch/PRODUCT_HUNT_LAUNCH_KIT_v0_6.md)
+- GitHub launch README notes: [`docs/launch/GITHUB_LAUNCH_README_NOTES_v0_6.md`](docs/launch/GITHUB_LAUNCH_README_NOTES_v0_6.md)
+- Screenshot and GIF checklist: [`docs/launch/SCREENSHOT_AND_GIF_CHECKLIST_v0_6.md`](docs/launch/SCREENSHOT_AND_GIF_CHECKLIST_v0_6.md)
+- Launch FAQ: [`docs/launch/FAQ_v0_6.md`](docs/launch/FAQ_v0_6.md)
 
 ## Validation commands
 
-Run the full available quality sequence:
-
 ```bash
-npm run -s validate:bootstrap-context
-npm run -s validate:launcher-public-repo-strategy
-npm run -s validate:launcher-c02-readme-quickstart-install-promise
-npm run -s validate:launcher-c03-public-template-manifests
-npm run -s validate:launcher-c04-local-byok-config-scaffold
-npm run -s validate:launcher-c05-launch-assets
+npm run -s validate:launch-docs
 npm run -s quality
 git diff --check
 git status --short
 ```
 
-If `npm` is unavailable, run the Node validators directly:
+If npm is unavailable, run the launch-docs validator directly:
 
 ```bash
-node scripts/validate-bootstrap-context.mjs
-node scripts/validate-launcher-public-repo-strategy.mjs
-node scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs
-node scripts/validate-launcher-c03-public-template-manifests.mjs
-node scripts/validate-launcher-c04-local-byok-config-scaffold.mjs
-node scripts/validate-launcher-c05-launch-assets.mjs
+node scripts/validate-launch-docs.mjs
 ```
 
 ## Roadmap
 
-Current Atlas milestone:
+Current Atlas capability pack:
 
 ```text
-v0.6-C05
-docs(launch): add Product Hunt, GitHub and X launch assets
+v0.6-H02 + v0.6-H07 unified capability pack
+docs(launch): add Launcher README and Product Hunt Launch Kit
 ```
 
-Previous completed milestones:
+This pack prepares the public README and Product Hunt launch-kit surface. It does not change runtime capabilities.
 
-- v0.6-C01: public repo strategy.
-- v0.6-C02: README / quickstart / install promise.
-- v0.6-C03: public template manifests.
-- v0.6-C04: local/BYOK config scaffold.
+Atlas PR progression: `v0.6-C02` established README/quickstart/install-promise boundaries, `v0.6-C03 feat(templates): add public Capsule template manifests` added manifest previews, and `v0.6-C05 docs(launch): add Product Hunt, GitHub and X launch assets` added the prior launch-copy foundation.
 
-Next Atlas PR:
+Near-term public-safe sequence:
 
-```text
-v0.6-C06
-feat(web): add download and launcher CTA surface
-```
+- Keep README, quickstart and launch-kit claims validator-protected.
+- Add approved screenshots/GIFs only after the visuals match implemented public surfaces.
+- Keep template manifests public-safe and non-executable until a future approved implementation PR exists.
+- Document the Cloud Trial handoff without implementing checkout, auth, customer portal, telemetry or cloud sync.
+- Continue separating launcher documentation from private core behavior.
 
-Expected future sequence:
+## License / source posture
 
-- C06: web download / launcher CTA surface.
-- C07: shareable template pages.
-- C08: referral / powered-by loop.
+This repository is public source-available, not open source.
 
-## Contribution boundary
+The operative license is [`LICENSE.md`](LICENSE.md): TransformIA Capsule Launcher Source-Available Evaluation License v0.1. Public visibility does not grant production, commercial, redistribution, SaaS, white-label, managed-service, private-core or TransformIA branding rights.
 
-Contributions should improve downloadability, public-safe onboarding, local/BYOK usability, private-core protection, template safety, install clarity, buyer/user legibility, upgrade-path clarity, validation against false claims or reproducible launcher readiness.
-
-Do not add private runtime code, customer material, secrets, binary assets, installer artifacts, connector execution, payment/auth/database/cloud-sync/telemetry implementation or license posture changes without explicit Dani approval.
-
-## Operating rule
-
-Private core remains private. Launcher distributes, documents and guides. Runtime decides. Web renders. Dani approves.
+See [`NOTICE.md`](NOTICE.md) and [`docs/IP_AND_LICENSE_BOUNDARY.md`](docs/IP_AND_LICENSE_BOUNDARY.md).
