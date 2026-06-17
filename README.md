@@ -77,6 +77,8 @@ Read the catalog in [`docs/TEMPLATE_MANIFEST_CATALOG.md`](docs/TEMPLATE_MANIFEST
 
 The v0.7-A03 Connector Kits preview publishes a public-safe connector catalog and Install Doctor shell. See [`connectors/README.md`](connectors/README.md).
 
+Run `npm run -s validate:connector-recipes` to validate recipe metadata. `npm run -s doctor` checks the public connector catalog plus Google Calendar and WhatsApp Template Manager recipe metadata without proving provider connection or send capability.
+
 ```bash
 npm run -s validate:connector-manifests
 npm run -s validate:connector-recipes

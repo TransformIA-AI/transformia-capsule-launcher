@@ -29,6 +29,17 @@ These entries are public-safe planning manifests only. They are not provider con
 
 Recipe packs live in [`connectors/recipes`](recipes/README.md). They extend connector manifests with public-safe installability descriptions and local/BYOK shape checks. A recipe pack being available is not proof that the provider is connected, healthy or deployed.
 
+## WhatsApp Template Manager recipe pack
+
+The WhatsApp Template Manager recipe pack includes approved-template catalog review, template approval status review and approval-gated template selection. These recipes are installable descriptions only: the launcher does not connect WhatsApp, call Meta, store credentials, expose provider identifiers, send messages or enable outbound dispatch.
+
+Run:
+
+```bash
+npm run -s validate:connector-recipes
+npm run -s doctor connectors/examples/whatsapp-template-manager.local.config.example.json
+```
+
 ## Google Calendar recipe pack
 
 The Google Calendar recipe pack includes availability review, event-draft handoff and booking-link preparation. These recipes are installable descriptions only: the launcher does not call Google, perform OAuth, store tokens, deploy n8n workflows or create calendar events.

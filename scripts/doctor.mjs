@@ -98,6 +98,7 @@ if (structuralErrors.length) {
 
 console.log('Connector catalog OK.');
 if (recipes.some(({ recipe }) => recipe.connectorId === 'google-calendar')) console.log('Google Calendar recipe pack OK.');
+if (recipes.some(({ recipe }) => recipe.connectorId === 'whatsapp-template-manager')) console.log('WhatsApp Template Manager recipe pack OK.');
 
 let config = null;
 if (existsSync(suppliedConfigPath)) {
@@ -131,10 +132,10 @@ if (config) {
       console.log(`${manifest.displayName}: configuración local requerida presente.`);
     }
 
-    if (connectorId === 'google-calendar') {
-      const connectorRecipes = recipes.map(({ recipe }) => recipe).filter((recipe) => recipe.connectorId === connectorId);
+    const connectorRecipes = recipes.map(({ recipe }) => recipe).filter((recipe) => recipe.connectorId === connectorId);
+    if (connectorRecipes.length) {
       const selectedRecipes = enabledRecipes.length
-        ? enabledRecipes.map((recipeId) => recipeById.get(recipeId)).filter(Boolean)
+        ? enabledRecipes.map((recipeId) => recipeById.get(recipeId)).filter((recipe) => recipe?.connectorId === connectorId)
         : connectorRecipes;
       const unknownRecipes = enabledRecipes.filter((recipeId) => !recipeById.has(recipeId));
       for (const _unknown of unknownRecipes) console.log('Hay una receta local no reconocida. Revisa connectors/recipes/README.md.');
@@ -143,7 +144,11 @@ if (config) {
       const requiredRecipeKeys = new Set(selectedRecipes.flatMap((recipe) => recipe.requiredLocalConfigKeys ?? []));
       const missingRecipeKeys = [...requiredRecipeKeys].filter((key) => !(key in config)).map(safeKeyName);
       if (missingRecipeKeys.length) console.log(`Falta configuración local para activar estas recetas: ${missingRecipeKeys.join(', ')}.`);
-      if (selectedRecipes.some((recipe) => recipe.actionMode === 'approval_gated' || recipe.requiresApproval === true)) console.log('La creación de eventos requiere aprobación humana.');
+      if (connectorId === 'google-calendar' && selectedRecipes.some((recipe) => recipe.actionMode === 'approval_gated' || recipe.requiresApproval === true)) console.log('La creación de eventos requiere aprobación humana.');
+      if (connectorId === 'whatsapp-template-manager') {
+        if (selectedRecipes.some((recipe) => recipe.actionMode === 'approval_gated' || recipe.requiresApproval === true)) console.log('Seleccionar una plantilla no envía mensajes.');
+        console.log('La aprobación real de plantillas se completa desde Capsule Cloud o el proveedor.');
+      }
       console.log('La instalación real se completa desde Capsule Cloud.');
     }
   }
