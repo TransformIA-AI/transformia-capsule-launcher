@@ -24,6 +24,22 @@ This catalog is not runtime authority. It does not perform provider login, store
 
 These entries are public-safe planning manifests only. They are not provider connections and they do not make operational claims.
 
+
+## Connector recipes
+
+Recipe packs live in [`connectors/recipes`](recipes/README.md). They extend connector manifests with public-safe installability descriptions and local/BYOK shape checks. A recipe pack being available is not proof that the provider is connected, healthy or deployed.
+
+## Google Calendar recipe pack
+
+The Google Calendar recipe pack includes availability review, event-draft handoff and booking-link preparation. These recipes are installable descriptions only: the launcher does not call Google, perform OAuth, store tokens, deploy n8n workflows or create calendar events.
+
+Run:
+
+```bash
+npm run -s validate:connector-recipes
+npm run -s doctor connectors/examples/google-calendar.local.config.example.json
+```
+
 ## How Install Doctor works
 
 `npm run doctor` reads the public manifests, Doctor message catalog and an optional local config path. It validates structure and prints customer-readable setup guidance, for example missing local configuration or the need to use Capsule Cloud for provider connection.

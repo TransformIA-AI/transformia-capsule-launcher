@@ -1,0 +1,11 @@
+{
+  "tenantAlias": "local-demo",
+  "selectedTemplate": "restaurant",
+  "enabledConnectors": ["google-calendar"],
+  "cloudHandoffUrl": "https://transform-ia.com/connectors/google-calendar/setup",
+  "enabledRecipes": [
+    "google-calendar.availability-check",
+    "google-calendar.create-event-draft",
+    "google-calendar.booking-link-prep"
+  ]
+}

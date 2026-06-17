@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 const root = process.cwd();
 const manifestDir = join(root, 'connectors', 'manifests');
+const recipeDir = join(root, 'connectors', 'recipes');
 const messagesPath = join(root, 'connectors', 'doctor', 'doctor-messages.json');
 const defaultConfigPath = join(root, 'connectors', 'examples', 'local.config.example.json');
 const suppliedConfigPath = process.argv[2] ? resolve(process.argv[2]) : defaultConfigPath;
@@ -17,11 +18,26 @@ function readJson(path, label) {
   }
 }
 
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? walk(path) : [path];
+  });
+}
+
 function loadManifests() {
   return readdirSync(manifestDir)
     .filter((file) => file.endsWith('.json'))
     .sort()
     .map((file) => readJson(join(manifestDir, file), `manifest ${file}`));
+}
+
+function loadRecipes() {
+  return walk(recipeDir)
+    .filter((file) => file.endsWith('.recipe.json'))
+    .sort()
+    .map((file) => ({ file, recipe: readJson(file, `recipe ${basename(file)}`) }));
 }
 
 function safeKeyName(key) {
@@ -43,6 +59,8 @@ const manifests = loadManifests();
 const manifestById = new Map(manifests.map((manifest) => [manifest.connectorId, manifest]));
 const messages = readJson(messagesPath, 'mensajes Doctor');
 const messageCodes = new Set(messages.map((message) => message.errorCode));
+const recipes = loadRecipes();
+const recipeById = new Map(recipes.map(({ recipe }) => [recipe.recipeId, recipe]));
 const structuralErrors = [];
 
 for (const manifest of manifests) {
@@ -57,23 +75,41 @@ for (const manifest of manifests) {
   }
 }
 
+for (const { recipe, file } of recipes) {
+  const manifest = manifestById.get(recipe.connectorId);
+  if (!manifest) structuralErrors.push(`${basename(file)}: conector no encontrado`);
+  if (!recipe.recipeId || recipeById.get(recipe.recipeId) !== recipe) structuralErrors.push(`${basename(file)}: recipeId duplicado o inválido`);
+  if (recipe.publicSafe !== true || recipe.noSecretsIncluded !== true || recipe.noProviderCall !== true || recipe.noLiveExecution !== true || recipe.noN8nLiveInstall !== true || recipe.noWebhookIncluded !== true || recipe.noRealTenantData !== true) {
+    structuralErrors.push(`${recipe.recipeId ?? basename(file)}: postura de receta inválida`);
+  }
+  for (const action of recipe.requiredConnectorActions ?? []) {
+    if (!manifest?.allowedActions?.includes(action)) structuralErrors.push(`${recipe.recipeId}: acción no declarada por manifest`);
+  }
+  for (const ref of recipe.doctorMessageRefs ?? []) {
+    if (!messageCodes.has(ref)) structuralErrors.push(`${recipe.recipeId}: mensaje Doctor no encontrado`);
+  }
+}
+
 if (structuralErrors.length) {
   console.error('Install Doctor encontró errores estructurales en el catálogo público.');
-  for (const _error of structuralErrors) console.error('- Revisa los manifests de conectores.');
+  for (const _error of structuralErrors) console.error('- Revisa los manifests, recetas y mensajes Doctor.');
   process.exit(1);
 }
 
 console.log('Connector catalog OK.');
+if (recipes.some(({ recipe }) => recipe.connectorId === 'google-calendar')) console.log('Google Calendar recipe pack OK.');
 
 let config = null;
 if (existsSync(suppliedConfigPath)) {
   config = readJson(suppliedConfigPath, 'configuración local');
 } else {
   console.log('Falta configuración local. Puedes usar Capsule Cloud para conectar proveedores reales.');
+  console.log('La instalación real se completa desde Capsule Cloud.');
 }
 
 if (config) {
   const enabled = Array.isArray(config.enabledConnectors) ? config.enabledConnectors : [];
+  const enabledRecipes = Array.isArray(config.enabledRecipes) ? config.enabledRecipes : [];
   console.log(`Configuración local detectada para plantilla: ${config.selectedTemplate ? 'configurada' : 'sin plantilla'}.`);
   if (!enabled.length) console.log('Falta elegir conectores en la configuración local.');
 
@@ -93,6 +129,22 @@ if (config) {
       console.log('Puedes completar la configuración local o usar Capsule Cloud para conectar proveedores reales.');
     } else {
       console.log(`${manifest.displayName}: configuración local requerida presente.`);
+    }
+
+    if (connectorId === 'google-calendar') {
+      const connectorRecipes = recipes.map(({ recipe }) => recipe).filter((recipe) => recipe.connectorId === connectorId);
+      const selectedRecipes = enabledRecipes.length
+        ? enabledRecipes.map((recipeId) => recipeById.get(recipeId)).filter(Boolean)
+        : connectorRecipes;
+      const unknownRecipes = enabledRecipes.filter((recipeId) => !recipeById.has(recipeId));
+      for (const _unknown of unknownRecipes) console.log('Hay una receta local no reconocida. Revisa connectors/recipes/README.md.');
+      if (!enabledRecipes.length) console.log('Falta configuración local para activar estas recetas.');
+
+      const requiredRecipeKeys = new Set(selectedRecipes.flatMap((recipe) => recipe.requiredLocalConfigKeys ?? []));
+      const missingRecipeKeys = [...requiredRecipeKeys].filter((key) => !(key in config)).map(safeKeyName);
+      if (missingRecipeKeys.length) console.log(`Falta configuración local para activar estas recetas: ${missingRecipeKeys.join(', ')}.`);
+      if (selectedRecipes.some((recipe) => recipe.actionMode === 'approval_gated' || recipe.requiresApproval === true)) console.log('La creación de eventos requiere aprobación humana.');
+      console.log('La instalación real se completa desde Capsule Cloud.');
     }
   }
 }
