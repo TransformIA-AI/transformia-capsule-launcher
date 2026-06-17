@@ -79,10 +79,11 @@ The v0.7-A03 Connector Kits preview publishes a public-safe connector catalog an
 
 ```bash
 npm run -s validate:connector-manifests
+npm run -s validate:connector-recipes
 npm run -s doctor
 ```
 
-Real provider connections happen through Capsule Cloud, not this public launcher. The launcher explains kit readiness, validates manifests and keeps provider credentials outside the repo.
+Real provider connections happen through Capsule Cloud, not this public launcher. The launcher explains kit and recipe readiness, validates manifests and recipes, and keeps provider credentials outside the repo. Google Calendar recipes are public-safe installability descriptions, not proof of provider connection or event creation.
 
 ## Local/BYOK config scaffold
 
