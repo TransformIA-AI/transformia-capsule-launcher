@@ -1,0 +1,16 @@
+{
+  "tenantAlias": "local-demo",
+  "selectedTemplate": "restaurant",
+  "enabledConnectors": ["whatsapp-template-manager"],
+  "cloudHandoffUrl": "https://transform-ia.com/connectors/whatsapp-template-manager/templates",
+  "enabledRecipes": [
+    "whatsapp-template-manager.approved-template-catalog",
+    "whatsapp-template-manager.check-template-approval",
+    "whatsapp-template-manager.select-template-for-review"
+  ],
+  "templateUseCases": [
+    "appointment_reminder",
+    "reservation_confirmation",
+    "follow_up"
+  ]
+}

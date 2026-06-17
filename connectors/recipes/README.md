@@ -17,6 +17,7 @@ Recipes are not n8n workflows. They do not install workflows, create live webhoo
 ## Current recipe packs
 
 - [Google Calendar Recipe Pack](google-calendar/README.md): availability review, event-draft handoff and booking-link preparation.
+- [WhatsApp Template Manager Recipe Pack](whatsapp-template-manager/README.md): approved-template catalog, approval status review and approval-gated template selection handoff.
 
 ## Security posture
 
