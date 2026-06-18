@@ -24,3 +24,9 @@ See:
 - [`templates/manifests/README.md`](manifests/README.md)
 - [`docs/TEMPLATE_MANIFEST_CATALOG.md`](../docs/TEMPLATE_MANIFEST_CATALOG.md)
 - [`docs/TEMPLATE_SAFETY_REVIEW_CHECKLIST.md`](../docs/TEMPLATE_SAFETY_REVIEW_CHECKLIST.md)
+
+## Restaurant Golden Kit
+
+The Restaurant Golden Kit lives in [`templates/restaurant-golden-kit`](restaurant-golden-kit/). It is a public-safe manifest and scenario recipe pack for restaurant onboarding demos using connector recipe references only.
+
+It does not include private runtime code, secrets, provider calls, live workflow installation, message sending, calendar event creation or booking confirmation.

@@ -1,0 +1,22 @@
+{
+  "recipeId": "restaurant.dietary-request",
+  "displayName": "Dietary request review",
+  "description": "Describes intake triage for dietary needs so a person can review the request before any guest-facing response is used.",
+  "scenario": "restaurant",
+  "actionMode": "approval_gated",
+  "riskLevel": "medium",
+  "requiresApproval": true,
+  "usesRecipes": ["whatsapp-template-manager.select-template-for-review"],
+  "requiredLocalConfigKeys": ["tenantAlias", "selectedTemplate", "eworkerName", "enabledConnectors", "enabledRecipes", "restaurantUseCases"],
+  "reviewReason": "Human review protects allergy, accessibility and preference handling.",
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nLiveInstall": true,
+  "noWebhookIncluded": true,
+  "noRealTenantData": true,
+  "noMessageSend": true,
+  "noCalendarEventCreation": true,
+  "noBookingConfirmation": true
+}

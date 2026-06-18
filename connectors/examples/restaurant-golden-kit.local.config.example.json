@@ -1,0 +1,25 @@
+{
+  "tenantAlias": "local-demo",
+  "selectedTemplate": "restaurant",
+  "eworkerName": "Aitana",
+  "enabledConnectors": [
+    "google-calendar",
+    "whatsapp-template-manager"
+  ],
+  "enabledRecipes": [
+    "google-calendar.availability-check",
+    "google-calendar.create-event-draft",
+    "whatsapp-template-manager.approved-template-catalog",
+    "whatsapp-template-manager.select-template-for-review",
+    "restaurant.reservation-request",
+    "restaurant.menu-inquiry",
+    "restaurant.dietary-request",
+    "restaurant.group-booking"
+  ],
+  "restaurantUseCases": [
+    "reservation-request",
+    "menu-inquiry",
+    "dietary-request",
+    "group-booking"
+  ]
+}

@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path';
 const root = process.cwd();
 const manifestDir = join(root, 'connectors', 'manifests');
 const recipeDir = join(root, 'connectors', 'recipes');
+const restaurantKitManifestPath = join(root, 'templates', 'restaurant-golden-kit', 'manifest.json');
 const messagesPath = join(root, 'connectors', 'doctor', 'doctor-messages.json');
 const defaultConfigPath = join(root, 'connectors', 'examples', 'local.config.example.json');
 const suppliedConfigPath = process.argv[2] ? resolve(process.argv[2]) : defaultConfigPath;
@@ -61,6 +62,7 @@ const messages = readJson(messagesPath, 'mensajes Doctor');
 const messageCodes = new Set(messages.map((message) => message.errorCode));
 const recipes = loadRecipes();
 const recipeById = new Map(recipes.map(({ recipe }) => [recipe.recipeId, recipe]));
+const restaurantKit = existsSync(restaurantKitManifestPath) ? readJson(restaurantKitManifestPath, 'Restaurant Golden Kit manifest') : null;
 const structuralErrors = [];
 
 for (const manifest of manifests) {
@@ -111,6 +113,19 @@ if (existsSync(suppliedConfigPath)) {
 if (config) {
   const enabled = Array.isArray(config.enabledConnectors) ? config.enabledConnectors : [];
   const enabledRecipes = Array.isArray(config.enabledRecipes) ? config.enabledRecipes : [];
+  if (restaurantKit && config.selectedTemplate === 'restaurant' && Array.isArray(config.restaurantUseCases)) {
+    const requiredConnectors = restaurantKit.requiredConnectors ?? [];
+    const requiredRecipes = restaurantKit.requiredRecipes ?? [];
+    const missingConnectors = requiredConnectors.filter((connectorId) => !enabled.includes(connectorId));
+    const missingRecipes = requiredRecipes.filter((recipeId) => !enabledRecipes.includes(recipeId));
+    const requiredLocalKeys = ['tenantAlias', 'selectedTemplate', 'eworkerName', 'enabledConnectors', 'enabledRecipes', 'restaurantUseCases'];
+    const missingLocalKeys = requiredLocalKeys.filter((key) => !(key in config));
+    if (!missingConnectors.length && !missingRecipes.length && !missingLocalKeys.length) console.log('Restaurant Golden Kit OK.');
+    else console.log('Restaurant Golden Kit requiere revisar conectores, recetas o configuración local.');
+    console.log('Aitana can be renamed in Capsule Cloud.');
+    console.log('No booking is confirmed from launcher.');
+    console.log('No WhatsApp message is sent from launcher.');
+  }
   console.log(`Configuración local detectada para plantilla: ${config.selectedTemplate ? 'configurada' : 'sin plantilla'}.`);
   if (!enabled.length) console.log('Falta elegir conectores en la configuración local.');
 

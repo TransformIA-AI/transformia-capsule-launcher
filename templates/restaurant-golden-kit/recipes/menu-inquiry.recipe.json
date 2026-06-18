@@ -1,0 +1,22 @@
+{
+  "recipeId": "restaurant.menu-inquiry",
+  "displayName": "Menu inquiry guidance",
+  "description": "Describes safe FAQ-style menu guidance for a dry-run restaurant scenario when local configuration enables that use case.",
+  "scenario": "restaurant",
+  "actionMode": "preview_only",
+  "riskLevel": "low",
+  "requiresApproval": false,
+  "usesRecipes": ["whatsapp-template-manager.approved-template-catalog"],
+  "requiredLocalConfigKeys": ["tenantAlias", "selectedTemplate", "eworkerName", "enabledConnectors", "enabledRecipes", "restaurantUseCases"],
+  "dryRunOnly": true,
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nLiveInstall": true,
+  "noWebhookIncluded": true,
+  "noRealTenantData": true,
+  "noMessageSend": true,
+  "noCalendarEventCreation": true,
+  "noBookingConfirmation": true
+}

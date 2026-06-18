@@ -1,0 +1,22 @@
+{
+  "recipeId": "restaurant.group-booking",
+  "displayName": "Group booking review",
+  "description": "Describes group reservation intake with extra approval when the party size is above the public kit threshold.",
+  "scenario": "restaurant",
+  "actionMode": "approval_gated",
+  "riskLevel": "medium",
+  "requiresApproval": true,
+  "approvalThreshold": { "partySizeGreaterThan": 8 },
+  "usesRecipes": ["google-calendar.availability-check", "google-calendar.create-event-draft", "whatsapp-template-manager.select-template-for-review"],
+  "requiredLocalConfigKeys": ["tenantAlias", "selectedTemplate", "eworkerName", "enabledConnectors", "enabledRecipes", "restaurantUseCases"],
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nLiveInstall": true,
+  "noWebhookIncluded": true,
+  "noRealTenantData": true,
+  "noMessageSend": true,
+  "noCalendarEventCreation": true,
+  "noBookingConfirmation": true
+}

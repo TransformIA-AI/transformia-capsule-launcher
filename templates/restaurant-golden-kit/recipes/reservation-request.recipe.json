@@ -1,0 +1,22 @@
+{
+  "recipeId": "restaurant.reservation-request",
+  "displayName": "Reservation request intake",
+  "description": "Describes a restaurant reservation intake path that reviews availability and prepares an approval handoff before any operational system acts.",
+  "scenario": "restaurant",
+  "actionMode": "approval_gated",
+  "riskLevel": "medium",
+  "requiresApproval": true,
+  "usesRecipes": ["google-calendar.availability-check", "google-calendar.create-event-draft", "whatsapp-template-manager.select-template-for-review"],
+  "requiredLocalConfigKeys": ["tenantAlias", "selectedTemplate", "eworkerName", "enabledConnectors", "enabledRecipes", "restaurantUseCases"],
+  "approvalPath": "Human review is required before a reservation answer leaves the governed runtime.",
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nLiveInstall": true,
+  "noWebhookIncluded": true,
+  "noRealTenantData": true,
+  "noMessageSend": true,
+  "noCalendarEventCreation": true,
+  "noBookingConfirmation": true
+}
