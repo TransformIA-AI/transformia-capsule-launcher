@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "validate:bootstrap-context": "node scripts/validate-bootstrap-context.mjs",
-    "quality": "npm run -s validate:bootstrap-context && npm run -s validate:launcher-public-repo-strategy && npm run -s validate:launcher-c02-readme-quickstart-install-promise && npm run -s validate:launcher-c03-public-template-manifests && npm run -s validate:launcher-c04-local-byok-config-scaffold && npm run -s validate:launcher-c05-launch-assets && npm run -s validate:connector-manifests && npm run -s validate:connector-recipes",
+    "quality": "npm run -s validate:bootstrap-context && npm run -s validate:launcher-public-repo-strategy && npm run -s validate:launcher-c02-readme-quickstart-install-promise && npm run -s validate:launcher-c03-public-template-manifests && npm run -s validate:launcher-c04-local-byok-config-scaffold && npm run -s validate:launcher-c05-launch-assets && npm run -s validate:connector-manifests && npm run -s validate:connector-recipes && npm run -s validate:restaurant-golden-kit-launcher",
     "validate:launcher-public-repo-strategy": "node scripts/validate-launcher-public-repo-strategy.mjs",
     "validate:launcher-c02-readme-quickstart-install-promise": "node scripts/validate-launcher-c02-readme-quickstart-install-promise.mjs",
     "validate:launcher-c03-public-template-manifests": "node scripts/validate-launcher-c03-public-template-manifests.mjs",
@@ -15,7 +15,8 @@
     "validate:launch-docs": "node scripts/validate-launch-docs.mjs",
     "validate:connector-manifests": "node scripts/validate-connector-manifests.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "validate:connector-recipes": "node scripts/validate-connector-recipes.mjs"
+    "validate:connector-recipes": "node scripts/validate-connector-recipes.mjs",
+    "validate:restaurant-golden-kit-launcher": "node scripts/validate-restaurant-golden-kit.mjs"
   },
   "license": "SEE LICENSE IN LICENSE.md"
 }

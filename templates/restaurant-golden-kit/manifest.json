@@ -1,0 +1,29 @@
+{
+  "templateId": "restaurant-golden-kit",
+  "displayName": "Restaurant Golden Kit",
+  "description": "Public-safe launcher kit for restaurant intake scenarios using calendar and WhatsApp template handoff descriptions.",
+  "eworkerDefaultName": "Aitana",
+  "requiredConnectors": [
+    "google-calendar",
+    "whatsapp-template-manager"
+  ],
+  "requiredRecipes": [
+    "google-calendar.availability-check",
+    "google-calendar.create-event-draft",
+    "whatsapp-template-manager.approved-template-catalog",
+    "whatsapp-template-manager.select-template-for-review",
+    "restaurant.reservation-request",
+    "restaurant.menu-inquiry",
+    "restaurant.dietary-request",
+    "restaurant.group-booking"
+  ],
+  "localConfigExample": "connectors/examples/restaurant-golden-kit.local.config.example.json",
+  "publicSafe": true,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nLiveInstall": true,
+  "noMessageSend": true,
+  "noCalendarEventCreation": true,
+  "noBookingConfirmation": true
+}

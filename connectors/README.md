@@ -87,3 +87,14 @@ A later approved runtime milestone can define OAuth PKCE and Token Vault handoff
 ## Future Restaurant Golden Kit
 
 The Restaurant Golden Kit can use this catalog as public-safe installation language: calendar availability, approved WhatsApp templates and local configuration shape first, with real provider connection handled outside this repo.
+
+## Restaurant Golden Kit
+
+The Restaurant Golden Kit combines Google Calendar recipe references, WhatsApp Template Manager recipe references and restaurant scenario recipes as public launcher metadata. It does not install n8n, call providers, send WhatsApp messages, create calendar events or confirm bookings.
+
+Run:
+
+```bash
+npm run -s validate:restaurant-golden-kit-launcher
+npm run -s doctor connectors/examples/restaurant-golden-kit.local.config.example.json
+```
