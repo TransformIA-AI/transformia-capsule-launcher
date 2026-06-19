@@ -35,3 +35,7 @@ Key and certificate file names such as `id_rsa`, `.pem`, `.key`, `.p12`, `.pfx`,
 ## A08 dotfile/config scan update
 
 Common secret-bearing dotfiles and config files are scanned line by line, including `.npmrc`, `.netrc`, `.pypirc`, `kubeconfig`, `Dockerfile` and `Makefile`. Key and certificate files remain blocked as credential-bearing files.
+
+## A08 provider-prefixed and text-source scan update
+
+Provider-prefixed key names such as `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `DATABASE_PASSWORD` and `MY_WEBHOOK_URL` are detected when they appear in assignment-like lines with non-placeholder values. Common text/source/config files such as `.sh`, `.py`, `.ts`, `.tsx`, `.toml`, `.ini` and `.html` are scanned. The scanner remains pattern-based and conservative.

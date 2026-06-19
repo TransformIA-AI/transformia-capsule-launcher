@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { inspectSecretSafetyLine, isSecretBearingTextFilename, isSensitiveCredentialFilename, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
+import { extractAssignmentKey, inspectSecretSafetyLine, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -33,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'isSensitiveCredentialFilename', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead', 'if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;']);
+mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'extractAssignmentKey', 'isSensitiveAssignmentKey', 'isSensitiveCredentialFilename', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead', 'if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -83,16 +83,37 @@ const blockedSecretSamples = [
   `{"${'api' + 'Key'}":"actual-secret"}`,
   `{"${'client' + '_secret'}":"actual-secret"}`,
   `{"${'password'}":"actual-secret"}`,
-  `${'api' + '_key'}=actual-secret`
+  `${'api' + '_key'}=actual-secret`,
+  `${'OPENAI' + '_API_KEY'}=actual-secret`,
+  `${'STRIPE' + '_SECRET_KEY'}=actual-secret`,
+  `${'DATABASE' + '_PASSWORD'}=actual-secret`,
+  `${'MY' + '_WEBHOOK_URL'}=actual-secret`,
+  `${'MY' + '_ACCESS_TOKEN'}=actual-secret`,
+  `${'MY' + '_REFRESH_TOKEN'}=actual-secret`,
+  `${'MY' + '_CLIENT_SECRET'}=actual-secret`,
+  `${'MY' + '_PRIVATE_KEY'}=actual-secret`,
+  `${'PROVIDER' + '_PAYLOAD'}=actual-secret`,
+  `{"${'OPENAI' + '_API_KEY'}":"actual-secret"}`,
+  `{"${'stripe' + '_secret_key'}":"actual-secret"}`,
+  `${'database' + 'Password'}: actual-secret`,
+  `${'client' + 'Secret'}=actual-secret`,
+  `${'private' + 'Key'}=actual-secret`
 ];
 for (const sample of blockedSecretSamples) {
   if (!inspectSecretSafetyLine(sample, 'in-memory-regression.json').includes('sensitive_key_name_outside_safe_context')) fail('secret scanner regression missed blocked sensitive key sample.');
 }
+for (const key of ['OPENAI_API_KEY','STRIPE_SECRET_KEY','DATABASE_PASSWORD','MY_WEBHOOK_URL','MY_ACCESS_TOKEN','MY_REFRESH_TOKEN','MY_CLIENT_SECRET','MY_PRIVATE_KEY','PROVIDER_PAYLOAD','databasePassword','clientSecret','privateKey']) {
+  if (!isSensitiveAssignmentKey(key)) fail(`secret scanner regression missed sensitive assignment key: ${key}`);
+}
+if (extractAssignmentKey(`${'OPENAI' + '_API_KEY'}=actual-secret`) !== 'OPENAI_API_KEY') fail('secret scanner regression failed to extract provider-prefixed assignment key.');
 const allowedSecretSamples = [
   `{"${'api' + 'Key'}":"REPLACE_WITH_API_KEY"}`,
   `${'api' + '_key'}=REPLACE_WITH_API_KEY`,
   `${'WEBHOOK' + '_URL'}=REPLACE_WITH_WEBHOOK_URL`,
-  `${'API' + '_KEY'}=<API_KEY_PLACEHOLDER>`
+  `${'API' + '_KEY'}=<API_KEY_PLACEHOLDER>`,
+  `${'OPENAI' + '_API_KEY'}=REPLACE_WITH_OPENAI_API_KEY`,
+  `${'STRIPE' + '_SECRET_KEY'}=<STRIPE_SECRET_KEY_PLACEHOLDER>`,
+  `{"${'DATABASE' + '_PASSWORD'}":"REPLACE_WITH_DATABASE_PASSWORD"}`
 ];
 for (const sample of allowedSecretSamples) {
   if (inspectSecretSafetyLine(sample, '.env.example').length !== 0) fail('secret scanner regression blocked placeholder-safe sample.');
@@ -117,13 +138,24 @@ for (const path of ['.npmrc','.netrc','.pypirc','kubeconfig','Dockerfile','Makef
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped secret-bearing text path: ${path}`);
 }
 
+for (const path of ['script.sh','shell.bash','shell.zsh','tool.py','component.ts','component.tsx','view.jsx','index.html','style.css','style.scss','config.toml','settings.ini','service.conf','app.cfg','app.properties','data.xml','data.csv']) {
+  if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped common text/source path: ${path}`);
+}
+
 const blockedSecretBearingTextSamples = [
   { rel: '.npmrc', line: `${'TOKEN'}=${'ghp_' + '1234567890abcdefghijklmnop'}` },
   { rel: '.netrc', line: `${'password'}=${'actual-secret'}` },
   { rel: '.pypirc', line: `${'password'}=${'actual-secret'}` },
   { rel: 'kubeconfig', line: `${'access' + 'Token'}=${'actual-secret'}` },
   { rel: 'Dockerfile', line: `${'ENV OPENAI' + '_API_KEY'}=${'sk-' + '1234567890abcdef'}` },
-  { rel: 'Makefile', line: `${'API' + '_KEY'}=${'actual-secret'}` }
+  { rel: 'Makefile', line: `${'API' + '_KEY'}=${'actual-secret'}` },
+  { rel: 'script.sh', line: `${'OPENAI' + '_API_KEY'}=actual-secret` },
+  { rel: 'tool.py', line: `${'DATABASE' + '_PASSWORD'}=actual-secret` },
+  { rel: 'component.ts', line: `${'STRIPE' + '_SECRET_KEY'}=actual-secret` },
+  { rel: 'component.tsx', line: `${'MY' + '_WEBHOOK_URL'}=actual-secret` },
+  { rel: 'config.toml', line: `${'DATABASE' + '_PASSWORD'}=actual-secret` },
+  { rel: 'settings.ini', line: `${'DATABASE' + '_PASSWORD'}=actual-secret` },
+  { rel: 'index.html', line: `${'client' + 'Secret'}=actual-secret` }
 ];
 for (const sample of blockedSecretBearingTextSamples) {
   if (inspectSecretSafetyLine(sample.line, sample.rel).length === 0) fail(`secret scanner regression allowed secret-bearing text sample: ${sample.rel}`);

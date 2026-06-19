@@ -39,3 +39,9 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 
 - Common secret-bearing dotfiles and config files are scanned, including `.npmrc`, `.netrc`, `.pypirc`, `kubeconfig`, `Dockerfile` and `Makefile`.
 - Key and certificate files remain blocked as credential-bearing files.
+
+## A08 provider-prefixed and text-source secret scan hardening
+
+- Provider-prefixed key names are detected in assignment-like contexts when values are not placeholder-safe.
+- Common text/source/config files are scanned, including `.sh`, `.py`, `.ts`, `.tsx`, `.toml`, `.ini` and `.html`.
+- The scanner remains pattern-based and conservative.

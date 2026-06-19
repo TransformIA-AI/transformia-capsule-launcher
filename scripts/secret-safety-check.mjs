@@ -3,7 +3,7 @@ import { basename, extname, join, relative } from 'node:path';
 
 const root = process.cwd();
 const ignoredDirs = new Set(['.git','node_modules','dist','build','coverage','.next']);
-const scanExtensions = new Set(['.js','.mjs','.json','.md','.txt','.yml','.yaml','.example']);
+const scanExtensions = new Set(['.js','.mjs','.json','.md','.txt','.yml','.yaml','.example','.sh','.bash','.zsh','.env','.py','.ts','.tsx','.jsx','.html','.css','.scss','.toml','.ini','.conf','.cfg','.properties','.xml','.csv']);
 const placeholderPattern = /(<[^>]+>|YOUR_[A-Z0-9_]+|REPLACE_WITH_[A-Z0-9_]+|example|placeholder|public-safe|boundary|no secrets|no secret|not include|must stay outside|does not ask|sin credenciales|no requiere)/i;
 const sensitiveKeyPattern = /["']?\b(api[_-]?key|apiKey|access[_-]?token|accessToken|refresh[_-]?token|refreshToken|client[_-]?secret|clientSecret|private[_-]?key|privateKey|provider[_-]?payload|providerPayload|webhook[_-]?url|webhookUrl|password|credential|secret)\b["']?\s*[:=]/i;
 const tokenValuePattern = /\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/;
@@ -55,19 +55,56 @@ export function shouldScanSecretSafetyPath(path) {
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
 }
 
+function extractAssignmentValue(line) {
+  const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?[^"'\s:=]+["']?\s*[:=]\s*(.+?)\s*[,;}]?\s*$/i);
+  return match ? match[1].trim().replace(/^(["'])(.*)\1$/, '$2') : null;
+}
+
 function safeContext(line, rel) {
   if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;
+  const assignmentValue = extractAssignmentValue(line);
+  if (/^(true|false|null|undefined|0|1)$/i.test(assignmentValue ?? '')) return true;
   if (rel.endsWith('.env.example')) return placeholderPattern.test(line);
   return placeholderPattern.test(line);
 }
 
+export function extractAssignmentKey(line) {
+  const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?([^"'\s:=]+)["']?\s*[:=]/i);
+  return match ? match[1] : null;
+}
+
+export function isSensitiveAssignmentKey(key) {
+  if (typeof key !== 'string' || !key.trim()) return false;
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return normalized.endsWith('apikey')
+    || normalized.endsWith('accesstoken')
+    || normalized.endsWith('refreshtoken')
+    || normalized.endsWith('clientsecret')
+    || normalized.endsWith('privatekey')
+    || normalized.endsWith('providerpayload')
+    || normalized.endsWith('webhookurl')
+    || normalized.endsWith('password')
+    || normalized.endsWith('credential')
+    || normalized.endsWith('secret')
+    || normalized.endsWith('secretkey')
+    || normalized.includes('apikey')
+    || normalized.includes('accesstoken')
+    || normalized.includes('refreshtoken')
+    || normalized.includes('clientsecret')
+    || normalized.includes('privatekey')
+    || normalized.includes('providerpayload')
+    || normalized.includes('webhookurl')
+    || normalized.includes('secretkey');
+}
+
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
-  if (/scripts\/validate-.*\.mjs$/.test(rel) && /credential-shaped string|forbidden|pattern\.test/.test(line)) return [];
+  if (/scripts\/validate-.*\.mjs$/.test(rel) && (/credential-shaped string|forbidden|pattern\.test/.test(line) || /^\s*\//.test(line))) return [];
   const finding = [];
   if (privateKeyPattern.test(line) && !safeContext(line, rel)) finding.push('private_key_block');
   if (tokenValuePattern.test(line) && !safeContext(line, rel)) finding.push('token_or_api_key_value');
   if (webhookUrlPattern.test(line) && !safeContext(line, rel)) finding.push('webhook_url');
-  if (sensitiveKeyPattern.test(line) && !safeContext(line, rel)) finding.push('sensitive_key_name_outside_safe_context');
+  const assignmentKey = extractAssignmentKey(line);
+  if ((sensitiveKeyPattern.test(line) || isSensitiveAssignmentKey(assignmentKey)) && !safeContext(line, rel)) finding.push('sensitive_key_name_outside_safe_context');
   if (customerDataPattern.test(line) && !safeContext(line, rel)) finding.push('raw_customer_data_pattern');
   return finding;
 }
