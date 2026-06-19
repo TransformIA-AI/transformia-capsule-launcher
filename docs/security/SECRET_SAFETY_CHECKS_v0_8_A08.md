@@ -51,3 +51,9 @@ JavaScript and TypeScript source declarations such as `const`, `let`, `var` and 
 ## A08 Dockerfile ARG/ENV scan update
 
 Dockerfile `ARG KEY=value`, `ENV KEY=value` and `ENV KEY value` forms are parsed for sensitive assignments. `ARG KEY` without a default value is not treated as a leaked secret by itself. Placeholder Dockerfile values remain allowed, and the scanner remains pattern-based and conservative.
+
+## A08 scanner allowlist safety update
+
+Internal validator/scanner allowlists are fixture-only and never suppress hard token, private-key, webhook, customer-data or sensitive-key assignment findings. Embedded validator fixture assignments are inspected, and allowlisted scanner or validator fixture lines may only suppress non-hard internal pattern false positives.
+
+Slash-prefixed command lines are inspected for sensitive environment assignments, and Pattern variables are only allowlisted when they are actual scanner regex declarations or safe RegExp constructions.

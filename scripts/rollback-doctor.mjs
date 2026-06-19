@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 const root = process.cwd();
 const rollbackPlanPath = join(root, 'bootstrap', 'rollback', 'rollback-plan.example.json');
@@ -77,7 +78,9 @@ function printHuman(report) {
   console.log('No rollback, delete, provider call or live execution was performed.');
 }
 
-const invoked = import.meta.url === `file://${process.argv[1]}`;
+const invoked = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 if (invoked) {
   const json = process.argv.includes('--json');
   const report = buildRollbackDoctorReport();

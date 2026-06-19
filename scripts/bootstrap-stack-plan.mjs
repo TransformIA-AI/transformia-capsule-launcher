@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = process.cwd();
-const args = process.argv.slice(2);
-const modeArg = readFlag('--mode');
-const configPath = readFlag('--config');
-const jsonOutput = args.includes('--json');
+const parsedArgs = parseArgs(process.argv.slice(2));
+const modeArg = parsedArgs.mode;
+const configPath = parsedArgs.config;
+const jsonOutput = parsedArgs.json;
 const cliModeMap = new Map([
   ['managed', 'managed_cloud_handoff'],
   ['self-host', 'self_host_local_plan']
@@ -15,9 +15,26 @@ const blockers = [];
 const warnings = [];
 const requiredTrue = ['publicSafe','sourceAvailableBoundary','noSecretsIncluded','noProviderCall','noLiveExecution','noN8nExecution','noWebhookServer','noDatabaseProvisioning','noBinaryInstaller','noDockerStart','noCloudDeploy','humanApprovalRequiredBeforeLive'];
 
-function readFlag(flag) {
-  const index = args.indexOf(flag);
-  return index === -1 ? null : args[index + 1] ?? null;
+export function parseArgs(argv) {
+  const parsed = { mode: null, config: null, json: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--') continue;
+    if (arg === '--json') {
+      parsed.json = true;
+    } else if (arg === '--mode') {
+      parsed.mode = argv[index + 1] ?? null;
+      index += 1;
+    } else if (arg.startsWith('--mode=')) {
+      parsed.mode = arg.slice('--mode='.length);
+    } else if (arg === '--config') {
+      parsed.config = argv[index + 1] ?? null;
+      index += 1;
+    } else if (arg.startsWith('--config=')) {
+      parsed.config = arg.slice('--config='.length);
+    }
+  }
+  return parsed;
 }
 
 function readJson(path, label) {

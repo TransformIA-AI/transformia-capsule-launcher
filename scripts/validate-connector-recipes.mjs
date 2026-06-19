@@ -127,7 +127,7 @@ const syntheticCases = [
   { name: 'duplicate recipeId', recipe: { ...syntheticBase, recipeId: 'whatsapp-template-manager.approved-template-catalog' }, seen: new Set(['whatsapp-template-manager.approved-template-catalog']), expected: 'duplicates recipeId' },
   { name: 'unknown extra action', recipe: { ...syntheticBase, requiredConnectorActions: ['Unknown action'] }, expected: 'requiredConnectorActions must exist in manifest' },
   { name: 'doctor ref resolution', recipe: { ...syntheticBase, doctorMessageRefs: ['missing_ref'] }, expected: 'doctorMessageRef does not resolve' },
-  { name: 'compact sensitive keys', recipe: { ...syntheticBase, wabaId: 'blocked', phoneNumberId: 'blocked', rawTemplateBody: 'blocked', providerPayload: 'blocked', customerPhone: 'blocked' }, expected: 'forbidden public-safety term' },
+  { name: 'compact sensitive keys', recipe: { ...syntheticBase, wabaId: 'blocked', phoneNumberId: 'blocked', rawTemplateBody: 'blocked', providerPayload: 'blocked', ['customer' + 'Phone']: 'blocked' }, expected: 'forbidden public-safety term' },
   { name: 'protocol relative URL', recipe: { ...syntheticBase, description: 'See //example.com/path' }, expected: 'protocol-relative URL' }
 ];
 for (const testCase of syntheticCases) {

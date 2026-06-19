@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, extname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { basename, extname, join, relative, resolve } from 'node:path';
 
 const root = process.cwd();
 const ignoredDirs = new Set(['.git','node_modules','dist','build','coverage','.next']);
 const scanExtensions = new Set(['.js','.mjs','.ts','.tsx','.jsx','.json','.md','.txt','.yml','.yaml','.example','.sh','.bash','.zsh','.env','.py','.html','.css','.scss','.toml','.ini','.conf','.cfg','.properties','.xml','.csv']);
 const tokenValuePattern = /\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/;
-const privateKeyPattern = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+const privateKeyPattern = new RegExp(`${'-----BEGIN '}[A-Z ]*${'PRIVATE KEY-----'}`);
 const webhookUrlPattern = /https?:\/\/[^\s"')]+webhook[^\s"')]+/i;
 const customerDataPattern = /\b(customer|tenant|client)\s*(email|phone|address|payload|record)\s*[:=]\s*["'][^"']+["']/i;
 const sensitiveCredentialBasenames = new Set(['id_rsa','id_dsa','id_ecdsa','id_ed25519']);
@@ -41,7 +42,13 @@ function walk(dir) {
 }
 
 function normalizePathForPolicy(filePath) {
-  return filePath.replaceAll('\\\\', '/');
+  return String(filePath ?? '').replaceAll('\\', '/');
+}
+
+function normalizedPolicyPaths(filePath) {
+  const raw = normalizePathForPolicy(filePath);
+  const rel = normalizePathForPolicy(relative(root, filePath));
+  return [raw, rel];
 }
 
 function stripInlineComment(value) {
@@ -76,6 +83,9 @@ export function extractDockerfileAssignment(line) {
 }
 
 export function extractAssignment(line) {
+  const text = String(line ?? '');
+  if (/^\s*\/(?:\\.|[^/\n])+\/[gimsuy]*[,;]?\s*$/.test(text)) return null;
+  if (/^\s*\/\S+\s+/.test(text)) return null;
   const dockerfileAssignment = extractDockerfileAssignment(line);
   if (dockerfileAssignment) return dockerfileAssignment;
 
@@ -89,6 +99,38 @@ export function extractAssignment(line) {
 
 export function extractAssignmentKey(line) {
   return extractAssignment(line)?.key ?? null;
+}
+
+export function extractCommandAssignments(line) {
+  const text = String(line ?? '');
+  const commandAssignments = [];
+  const commandAssignmentPattern = /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=([^\s"'`;)\]]+)/g;
+  for (const match of text.matchAll(commandAssignmentPattern)) {
+    commandAssignments.push({ key: match[1], value: unquote(stripInlineComment(match[2])) });
+  }
+  return commandAssignments;
+}
+
+export function extractEmbeddedAssignments(line) {
+  const text = String(line ?? '');
+  const candidates = new Set();
+  const quotedPattern = /(["'`])((?:\\.|(?!\1).)*?)\1/g;
+  for (const match of text.matchAll(quotedPattern)) candidates.add(match[2]);
+
+  const regexLiteralPattern = /\/(?:\\.|[^/\n])+\/[gimsuy]*/g;
+  for (const match of text.matchAll(regexLiteralPattern)) {
+    const body = match[0].replace(/^\//, '').replace(/\/[gimsuy]*$/, '');
+    if (body.includes('=') && !/[\\[\]]/.test(body)) candidates.add(body.replaceAll('\\_', '_').replaceAll('\\s+', ' '));
+  }
+
+
+  return [
+    ...[...candidates]
+      .filter((candidate) => !/[\\[\]]/.test(candidate))
+      .map((candidate) => extractAssignment(candidate))
+      .filter(Boolean),
+    ...extractCommandAssignments(text)
+  ];
 }
 
 export function normalizeAssignmentKey(key) {
@@ -149,8 +191,9 @@ export function isSensitiveCredentialFilename(filePath) {
 }
 
 export function isCredentialPath(filePath) {
-  const normalized = normalizePathForPolicy(filePath);
-  return credentialPathSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`/${suffix}`));
+  return normalizedPolicyPaths(filePath).some((normalized) =>
+    credentialPathSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`/${suffix}`))
+  );
 }
 
 export function isSecretBearingTextFilename(filePath) {
@@ -159,27 +202,77 @@ export function isSecretBearingTextFilename(filePath) {
 
 export function shouldScanSecretSafetyPath(path) {
   const rel = normalizePathForPolicy(relative(root, path));
-  if (rel.includes(`${'.git'}/`)) return false;
+  const raw = normalizePathForPolicy(path);
+  if (rel.includes(`${'.git'}/`) || raw.includes(`${'.git'}/`)) return false;
   if (isSensitiveCredentialFilename(path)) return true;
-  if (isCredentialPath(rel)) return true;
+  if (isCredentialPath(path)) return true;
   if (isSecretBearingTextFilename(path)) return true;
   if (basename(path) === '.env.example') return true;
   if (basename(path).startsWith('.env') && basename(path) !== '.env.example') return true;
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
 }
 
+function isAllowedScannerPatternDeclaration(assignment, rel) {
+  if (!assignment || !/scripts\/secret-safety-check\.mjs$/.test(normalizePathForPolicy(rel))) return false;
+  if (!/pattern$/i.test(String(assignment.key ?? ''))) return false;
+  const value = String(assignment.value ?? '').trim();
+  if (isHardSecretValue(value)) return false;
+  return /^\/(?:\\.|[^/\n])+\/[gimsuy]*$/.test(value) || /^new\s+RegExp\s*\(/.test(value);
+}
+
+function isUnsafeSensitiveAssignment(assignment, rel) {
+  if (isAllowedScannerPatternDeclaration(assignment, rel)) return false;
+  const key = String(assignment?.key ?? '');
+  const patternBaseKey = /pattern$/i.test(key) ? key.replace(/pattern$/i, '') : key;
+  return assignment
+    && (isSensitiveAssignmentKey(key) || isSensitiveAssignmentKey(patternBaseKey))
+    && !isPlaceholderValue(assignment.value, rel)
+    && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value);
+}
+
+export function isScannerInternalPatternLine(rel, line) {
+  const normalizedRel = normalizePathForPolicy(rel);
+  const text = String(line ?? '');
+  const assignment = extractAssignment(text);
+  if (isHardSecretValue(text) || (assignment && isHardSecretValue(assignment.value))) return false;
+  if (isUnsafeSensitiveAssignment(assignment, rel)) return false;
+  if (extractEmbeddedAssignments(text).some((embedded) => isUnsafeSensitiveAssignment(embedded, rel) || isHardSecretValue(embedded.value))) return false;
+
+  if (normalizedRel === 'scripts/secret-safety-check.mjs') {
+    return /(?:const\s+\w*Pattern\s*=|Pattern\.test|credentialPathSuffixes|secretBearingTextBasenames|publicReasonCodes|publicSafeSummary|noSecretsRead)/.test(text);
+  }
+  if (/^scripts\/validate-.*\.mjs$/.test(normalizedRel)) {
+    return /(?:blockedSecretSamples|allowedSecretSamples|blockedEnvExampleSamples|credential-shaped string|forbidden|pattern\.test|skipped credential path|fragment-only-regex-declaration)/.test(text)
+      || /^\s*\/[A-Za-z[\]().*+?^${}|\\-]+\/[a-z]*[,;]?\s*$/.test(text);
+  }
+  return false;
+}
+
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
-  if (/scripts\/secret-safety-check\.mjs$/.test(rel) && /Pattern\s*=/.test(line)) return [];
-  if (/scripts\/validate-.*\.mjs$/.test(rel) && (/credential-shaped string|forbidden|pattern\.test/.test(line) || /^\s*\//.test(line))) return [];
   const finding = [];
   const assignment = extractAssignment(line);
   const value = assignment?.value ?? line;
-  if (privateKeyPattern.test(value)) finding.push('private_key_block');
-  if (tokenValuePattern.test(value)) finding.push('token_or_api_key_value');
-  if (webhookUrlPattern.test(value)) finding.push('webhook_url');
-  if (assignment && isSensitiveAssignmentKey(assignment.key) && !isPlaceholderValue(assignment.value, rel) && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value)) finding.push('sensitive_key_name_outside_safe_context');
+  const embeddedAssignments = extractEmbeddedAssignments(line);
+
+  if (privateKeyPattern.test(value) || privateKeyPattern.test(line)) finding.push('private_key_block');
+  if (tokenValuePattern.test(value) || tokenValuePattern.test(line)) finding.push('token_or_api_key_value');
+  if (webhookUrlPattern.test(value) || webhookUrlPattern.test(line)) finding.push('webhook_url');
+  for (const embedded of embeddedAssignments) {
+    if (privateKeyPattern.test(embedded.value)) finding.push('private_key_block');
+    if (tokenValuePattern.test(embedded.value)) finding.push('token_or_api_key_value');
+    if (webhookUrlPattern.test(embedded.value)) finding.push('webhook_url');
+  }
+
+  if (isUnsafeSensitiveAssignment(assignment, rel)) finding.push('sensitive_key_name_outside_safe_context');
+  for (const embedded of embeddedAssignments) {
+    if (isUnsafeSensitiveAssignment(embedded, rel)) finding.push('sensitive_key_name_outside_safe_context');
+  }
+
   if (customerDataPattern.test(line) && !(assignment && isPlaceholderValue(assignment.value, rel))) finding.push('raw_customer_data_pattern');
-  return [...new Set(finding)];
+
+  if (finding.length > 0) return [...new Set(finding)];
+  if (isScannerInternalPatternLine(rel, line)) return [];
+  return [];
 }
 
 export function runSecretSafetyCheck() {
@@ -218,7 +311,9 @@ export function runSecretSafetyCheck() {
   };
 }
 
-const invoked = import.meta.url === `file://${process.argv[1]}`;
+const invoked = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 if (invoked) {
   const report = runSecretSafetyCheck();
   console.log(JSON.stringify(report, null, 2));

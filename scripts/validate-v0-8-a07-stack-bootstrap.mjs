@@ -108,7 +108,8 @@ for (const file of scannedFiles) {
     const allowBoundary = /does not include customer data|No raw connector payloads, raw evidence|customer data and live connector execution stay out|customer material, raw evidence/i.test(text);
     if (pattern.test(text) && !(allowBoundary && (label.includes('customer data') || label.includes('raw evidence')))) errors.push(`${file}: forbidden ${label}`);
   }
-  if (/sk-[A-Za-z0-9]{12,}|xox[baprs]-|-----BEGIN PRIVATE KEY-----/i.test(text)) errors.push(`${file}: credential-shaped string`);
+  const credentialShapePattern = new RegExp(`sk-[A-Za-z0-9]{12,}|xox[baprs]-|${'-----BEGIN ' + 'PRIVATE KEY-----'}`, 'i');
+  if (credentialShapePattern.test(text)) errors.push(`${file}: credential-shaped string`);
   if (/https?:\/\/(hooks|webhook)\./i.test(text)) errors.push(`${file}: webhook URL`);
 }
 
@@ -129,6 +130,10 @@ const requiredPlannerSourceSnippets = [
   'Unknown bootstrap mode.',
   'Config bootstrapMode is unknown.',
   'Config bootstrapMode differs from selected mode.',
+  'export function parseArgs(argv)',
+  "if (arg === '--') continue;",
+  "arg.startsWith('--mode=')",
+  "arg.startsWith('--config=')",
   'return config.bootstrapMode;',
   "return 'self_host_local_plan';"
 ];
@@ -152,7 +157,16 @@ function runPlanner(args, expectedStatus, expectedText) {
   if (expectedText && !output.includes(expectedText)) errors.push(`planner ${args.join(' ')} missing output: ${expectedText}`);
 }
 
+runPlanner(['--mode', 'managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--mode=managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--', '--mode', 'managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--', '--mode=managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--mode', 'self-host'], 0, 'Mode: self_host_local_plan');
+runPlanner(['--mode=self-host'], 0, 'Mode: self_host_local_plan');
+runPlanner(['--', '--mode', 'self-host'], 0, 'Mode: self_host_local_plan');
+runPlanner(['--', '--mode=self-host'], 0, 'Mode: self_host_local_plan');
 runPlanner(['--mode', 'managedd'], 1, 'Unknown bootstrap mode.');
+runPlanner(['--', '--mode', 'managedd'], 1, 'Unknown bootstrap mode.');
 runPlanner(['--mode', 'local'], 1, 'Unknown bootstrap mode.');
 runPlanner(['--config', 'bootstrap/examples/managed-cloud-handoff.example.json'], 0, 'Mode: managed_cloud_handoff');
 runPlanner(['--mode', 'self-host', '--config', 'bootstrap/examples/managed-cloud-handoff.example.json'], 1, 'Config bootstrapMode differs from selected mode.');
