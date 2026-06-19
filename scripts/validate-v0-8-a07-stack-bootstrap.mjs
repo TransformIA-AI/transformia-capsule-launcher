@@ -113,6 +113,19 @@ for (const file of scannedFiles) {
   if (/https?:\/\/(hooks|webhook)\./i.test(text)) errors.push(`${file}: webhook URL`);
 }
 
+
+const packageJson = existsSync(join(root, 'package.json')) ? readJson('package.json') : null;
+const requiredPackageScripts = {
+  'bootstrap:stack-plan': 'node scripts/bootstrap-stack-plan.mjs',
+  'bootstrap:stack-plan:managed': 'node scripts/bootstrap-stack-plan.mjs --mode managed',
+  'bootstrap:stack-plan:self-host': 'node scripts/bootstrap-stack-plan.mjs --mode self-host'
+};
+for (const [scriptName, expectedCommand] of Object.entries(requiredPackageScripts)) {
+  const actualCommand = packageJson?.scripts?.[scriptName];
+  if (!actualCommand) errors.push(`package.json missing script: ${scriptName}`);
+  else if (actualCommand !== expectedCommand) errors.push(`package.json script ${scriptName} must be exactly: ${expectedCommand}`);
+}
+
 const planner = existsSync(join(root, 'scripts/bootstrap-stack-plan.mjs')) ? read('scripts/bootstrap-stack-plan.mjs') : '';
 const plannerForbidden = [
   ['fetch' + '(', 'network fetch'],

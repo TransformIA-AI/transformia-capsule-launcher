@@ -99,7 +99,16 @@ npm run -s bootstrap:stack-plan
 npm run -s validate:v0-8-a07-stack-bootstrap
 ```
 
-Use `npm run -s bootstrap:stack-plan -- --mode managed` for the managed Cloud handoff plan and `npm run -s bootstrap:stack-plan -- --mode self-host` for the self-host local stack plan.
+For local gauntlet runs, especially on Windows PowerShell, use the explicit mode scripts instead of relying on npm argument forwarding:
+
+```bash
+npm run -s bootstrap:stack-plan:managed
+npm run -s bootstrap:stack-plan:self-host
+npm run -s doctor:deploy:managed
+npm run -s doctor:deploy:self-host
+```
+
+Argument forwarding through npm can vary by environment. Explicit mode scripts are the supported local gauntlet path instead of commands such as `npm run -s bootstrap:stack-plan -- --mode managed`.
 
 
 ## v0.8-A08 Governed deploy and rollback doctors

@@ -18,8 +18,12 @@
     "validate:connector-recipes": "node scripts/validate-connector-recipes.mjs",
     "validate:restaurant-golden-kit-launcher": "node scripts/validate-restaurant-golden-kit.mjs",
     "bootstrap:stack-plan": "node scripts/bootstrap-stack-plan.mjs",
+    "bootstrap:stack-plan:managed": "node scripts/bootstrap-stack-plan.mjs --mode managed",
+    "bootstrap:stack-plan:self-host": "node scripts/bootstrap-stack-plan.mjs --mode self-host",
     "validate:v0-8-a07-stack-bootstrap": "node scripts/validate-v0-8-a07-stack-bootstrap.mjs",
     "doctor:deploy": "node scripts/governed-deploy-doctor.mjs",
+    "doctor:deploy:managed": "node scripts/governed-deploy-doctor.mjs --mode managed",
+    "doctor:deploy:self-host": "node scripts/governed-deploy-doctor.mjs --mode self-host",
     "doctor:rollback": "node scripts/rollback-doctor.mjs",
     "secrets:check": "node scripts/secret-safety-check.mjs",
     "validate:v0-8-a08-deploy-rollback-secret-doctors": "node scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs"
