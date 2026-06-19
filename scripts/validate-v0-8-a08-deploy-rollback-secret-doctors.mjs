@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { extractAssignment, extractAssignmentKey, extractDockerfileAssignment, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isScannerInternalPatternLine, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
+import { extractAssignment, extractAssignmentKey, extractDockerfileAssignment, extractEmbeddedAssignments, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isScannerInternalPatternLine, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -33,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['fileURLToPath', 'resolve(process.argv[1]) === fileURLToPath(import.meta.url)', 'isScannerInternalPatternLine', 'runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'extractDockerfileAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustContain('scripts/secret-safety-check.mjs', ['fileURLToPath', 'resolve(process.argv[1]) === fileURLToPath(import.meta.url)', 'isScannerInternalPatternLine', 'runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'extractEmbeddedAssignments', 'extractDockerfileAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -86,8 +86,8 @@ for (const script of ['scripts/governed-deploy-doctor.mjs','scripts/rollback-doc
 }
 
 if (!isScannerInternalPatternLine('scripts/secret-safety-check.mjs', 'const tokenValuePattern = /fragment-only-regex-declaration/;')) fail('scanner internal helper rejected regex declaration.');
-if (!isScannerInternalPatternLine('scripts/validate-launch-docs.mjs', "mustContain('x', ['public reason strings']);")) fail('scanner internal helper rejected validator pattern line.');
-if (isScannerInternalPatternLine('src/A08_NEGATIVE.ts', 'const OPENAI_API_KEY = "actual-secret";')) fail('scanner internal helper allowed real source assignment.');
+if (!isScannerInternalPatternLine('scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs', 'const allowedSecretSamples = [')) fail('scanner internal helper rejected validator fixture declaration line.');
+if (isScannerInternalPatternLine('src/A08_NEGATIVE.ts', `${'const OPENAI' + '_API_KEY'} = "actual-secret";`)) fail('scanner internal helper allowed real source assignment.');
 
 const validatorAllowlistHardSecretSamples = [
   {
@@ -111,6 +111,33 @@ for (const sample of validatorAllowlistHardSecretSamples) {
   const findings = inspectSecretSafetyLine(sample.line, 'scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs');
   if (!findings.includes(sample.reason)) fail(`validator allowlist suppressed hard secret finding: ${sample.reason}`);
 }
+
+const validatorAllowlistSensitiveAssignmentSamples = [
+  `${'const OPENAI' + '_API_KEY'} = "real-non-matching-key"; // mustContain`,
+  `mustContain("fixture", ["${'OPENAI' + '_API_KEY'}=real-non-matching-key"])`,
+  `mustNotMatch("fixture", [/${'OPENAI' + '_API_KEY'}=real-non-matching-key/])`,
+  `const fixture = "${'STRIPE' + '_SECRET_KEY'}=real-non-matching-key";`,
+  `mustContain("fixture", ["${'DATABASE' + '_PASSWORD'}=real-non-matching-key"])`,
+  `mustContain("fixture", ["${'MY' + '_WEBHOOK_URL'}=real-non-matching-key"])`,
+  `mustContain("fixture", ["${'ARG OPENAI' + '_API_KEY'}=real-non-matching-key"])`,
+  `mustContain("fixture", ["${'ENV OPENAI' + '_API_KEY'} real-non-matching-key"])`
+];
+for (const sample of validatorAllowlistSensitiveAssignmentSamples) {
+  const findings = inspectSecretSafetyLine(sample, 'scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs');
+  if (!findings.includes('sensitive_key_name_outside_safe_context')) fail(`validator allowlist suppressed sensitive assignment: ${sample}`);
+}
+
+const validatorAllowlistPlaceholderSamples = [
+  `mustContain("fixture", ["${'OPENAI' + '_API_KEY'}=REPLACE_WITH_OPENAI_API_KEY"])`,
+  `${'const OPENAI' + '_API_KEY'} = "REPLACE_WITH_OPENAI_API_KEY";`
+];
+for (const sample of validatorAllowlistPlaceholderSamples) {
+  const findings = inspectSecretSafetyLine(sample, 'scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs');
+  if (findings.length !== 0) fail(`validator allowlist blocked placeholder-safe assignment: ${sample}`);
+}
+
+const embeddedEnvAssignment = extractEmbeddedAssignments(`mustContain("fixture", ["${'ENV OPENAI' + '_API_KEY'} real-non-matching-key"])`);
+if (!embeddedEnvAssignment.some((assignment) => assignment.key === 'OPENAI_API_KEY' && assignment.value === 'real-non-matching-key')) fail('embedded assignment extraction missed ENV space-form fixture.');
 
 const blockedSecretSamples = [
   `{"${'api' + 'Key'}":"actual-secret"}`,

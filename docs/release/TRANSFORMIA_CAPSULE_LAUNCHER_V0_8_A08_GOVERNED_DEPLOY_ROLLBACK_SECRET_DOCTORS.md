@@ -66,4 +66,4 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 
 ## A08 scanner allowlist safety update
 
-Internal validator/scanner allowlists never suppress hard token, private-key, webhook or customer-data findings. Allowlisted scanner or validator fixture lines may only suppress non-hard internal pattern false positives.
+Internal validator/scanner allowlists are fixture-only and never suppress hard token, private-key, webhook, customer-data or sensitive-key assignment findings. Embedded validator fixture assignments are inspected, and allowlisted scanner or validator fixture lines may only suppress non-hard internal pattern false positives.

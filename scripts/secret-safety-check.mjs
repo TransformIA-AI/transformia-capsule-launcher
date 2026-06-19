@@ -83,6 +83,7 @@ export function extractDockerfileAssignment(line) {
 }
 
 export function extractAssignment(line) {
+  if (/^\s*\//.test(String(line ?? ''))) return null;
   const dockerfileAssignment = extractDockerfileAssignment(line);
   if (dockerfileAssignment) return dockerfileAssignment;
 
@@ -96,6 +97,25 @@ export function extractAssignment(line) {
 
 export function extractAssignmentKey(line) {
   return extractAssignment(line)?.key ?? null;
+}
+
+export function extractEmbeddedAssignments(line) {
+  const text = String(line ?? '');
+  const candidates = new Set();
+  const quotedPattern = /(["'`])((?:\\.|(?!\1).)*?)\1/g;
+  for (const match of text.matchAll(quotedPattern)) candidates.add(match[2]);
+
+  const regexLiteralPattern = /\/(?:\\.|[^/\n])+\/[gimsuy]*/g;
+  for (const match of text.matchAll(regexLiteralPattern)) {
+    const body = match[0].replace(/^\//, '').replace(/\/[gimsuy]*$/, '');
+    if (body.includes('=') && !/[\\[\]]/.test(body)) candidates.add(body.replaceAll('\\_', '_').replaceAll('\\s+', ' '));
+  }
+
+
+  return [...candidates]
+    .filter((candidate) => !/[\\[\]]/.test(candidate))
+    .map((candidate) => extractAssignment(candidate))
+    .filter(Boolean);
 }
 
 export function normalizeAssignmentKey(key) {
@@ -177,17 +197,28 @@ export function shouldScanSecretSafetyPath(path) {
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
 }
 
+function isUnsafeSensitiveAssignment(assignment, rel) {
+  if (/scripts\/secret-safety-check\.mjs$/.test(normalizePathForPolicy(rel)) && /pattern$/i.test(String(assignment?.key ?? ''))) return false;
+  return assignment
+    && isSensitiveAssignmentKey(assignment.key)
+    && !isPlaceholderValue(assignment.value, rel)
+    && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value);
+}
+
 export function isScannerInternalPatternLine(rel, line) {
   const normalizedRel = normalizePathForPolicy(rel);
   const text = String(line ?? '');
   const assignment = extractAssignment(text);
-  if (assignment && isHardSecretValue(assignment.value)) return false;
+  if (isHardSecretValue(text) || (assignment && isHardSecretValue(assignment.value))) return false;
+  if (isUnsafeSensitiveAssignment(assignment, rel)) return false;
+  if (extractEmbeddedAssignments(text).some((embedded) => isUnsafeSensitiveAssignment(embedded, rel) || isHardSecretValue(embedded.value))) return false;
+
   if (normalizedRel === 'scripts/secret-safety-check.mjs') {
     return /(?:const\s+\w*Pattern\s*=|Pattern\.test|credentialPathSuffixes|secretBearingTextBasenames|publicReasonCodes|publicSafeSummary|noSecretsRead)/.test(text);
   }
   if (/^scripts\/validate-.*\.mjs$/.test(normalizedRel)) {
-    return /mustContain|mustNotMatch|blockedSecretSamples|allowedSecretSamples|blockedEnvExampleSamples|credential-shaped string|forbidden|pattern\.test|public reason|publicReasonCodes|skipped credential path/.test(text)
-      || /^\s*\//.test(text);
+    return /(?:blockedSecretSamples|allowedSecretSamples|blockedEnvExampleSamples|credential-shaped string|forbidden|pattern\.test|skipped credential path|fragment-only-regex-declaration)/.test(text)
+      || /^\s*\/[A-Za-z[\]().*+?^${}|\\-]+\/[a-z]*[,;]?\s*$/.test(text);
   }
   return false;
 }
@@ -196,17 +227,27 @@ export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
   const finding = [];
   const assignment = extractAssignment(line);
   const value = assignment?.value ?? line;
+  const embeddedAssignments = extractEmbeddedAssignments(line);
 
   if (privateKeyPattern.test(value) || privateKeyPattern.test(line)) finding.push('private_key_block');
   if (tokenValuePattern.test(value) || tokenValuePattern.test(line)) finding.push('token_or_api_key_value');
   if (webhookUrlPattern.test(value) || webhookUrlPattern.test(line)) finding.push('webhook_url');
+  for (const embedded of embeddedAssignments) {
+    if (privateKeyPattern.test(embedded.value)) finding.push('private_key_block');
+    if (tokenValuePattern.test(embedded.value)) finding.push('token_or_api_key_value');
+    if (webhookUrlPattern.test(embedded.value)) finding.push('webhook_url');
+  }
+
+  if (isUnsafeSensitiveAssignment(assignment, rel)) finding.push('sensitive_key_name_outside_safe_context');
+  for (const embedded of embeddedAssignments) {
+    if (isUnsafeSensitiveAssignment(embedded, rel)) finding.push('sensitive_key_name_outside_safe_context');
+  }
+
   if (customerDataPattern.test(line) && !(assignment && isPlaceholderValue(assignment.value, rel))) finding.push('raw_customer_data_pattern');
 
   if (finding.length > 0) return [...new Set(finding)];
   if (isScannerInternalPatternLine(rel, line)) return [];
-
-  if (assignment && isSensitiveAssignmentKey(assignment.key) && !isPlaceholderValue(assignment.value, rel) && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value)) finding.push('sensitive_key_name_outside_safe_context');
-  return [...new Set(finding)];
+  return [];
 }
 
 export function runSecretSafetyCheck() {
