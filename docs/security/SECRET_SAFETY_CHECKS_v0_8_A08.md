@@ -31,3 +31,7 @@ The A08 validator now executes the real secret safety scan as part of `npm run -
 ## A08 file-scan hardening update
 
 Key and certificate file names such as `id_rsa`, `.pem`, `.key`, `.p12`, `.pfx`, `.cer`, `.crt` and `.csr` are treated as blocked credential-bearing files. `.env.example` placeholders remain allowed, but token-like values, private-key blocks and webhook URLs are blocked even when the line contains placeholder or example wording.
+
+## A08 dotfile/config scan update
+
+Common secret-bearing dotfiles and config files are scanned line by line, including `.npmrc`, `.netrc`, `.pypirc`, `kubeconfig`, `Dockerfile` and `Makefile`. Key and certificate files remain blocked as credential-bearing files.

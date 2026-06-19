@@ -34,3 +34,8 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 - Key and certificate files are blocked as credential-bearing files.
 - `.env.example` placeholder lines remain allowed, but real token-like values, private-key blocks and webhook URLs are blocked.
 - The A08 validator fails if the checked-in rollback doctor report is not OK or contains blockers.
+
+## A08 dotfile/config secret scan hardening
+
+- Common secret-bearing dotfiles and config files are scanned, including `.npmrc`, `.netrc`, `.pypirc`, `kubeconfig`, `Dockerfile` and `Makefile`.
+- Key and certificate files remain blocked as credential-bearing files.

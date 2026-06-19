@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { inspectSecretSafetyLine, isSensitiveCredentialFilename, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
+import { inspectSecretSafetyLine, isSecretBearingTextFilename, isSensitiveCredentialFilename, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -33,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'isSensitiveCredentialFilename', 'shouldScanSecretSafetyPath', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead', 'if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;']);
+mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'isSensitiveCredentialFilename', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead', 'if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -110,6 +110,23 @@ for (const sample of blockedEnvExampleSamples) {
 for (const path of ['id_rsa','id_dsa','id_ecdsa','id_ed25519','private.pem','client.key','bundle.p12','bundle.pfx','server.cer','server.crt','request.csr']) {
   if (!isSensitiveCredentialFilename(path)) fail(`secret scanner regression missed sensitive credential filename: ${path}`);
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped sensitive credential path: ${path}`);
+}
+
+for (const path of ['.npmrc','.netrc','.pypirc','kubeconfig','Dockerfile','Makefile','dockerfile','makefile']) {
+  if (!isSecretBearingTextFilename(path)) fail(`secret scanner regression missed secret-bearing text filename: ${path}`);
+  if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped secret-bearing text path: ${path}`);
+}
+
+const blockedSecretBearingTextSamples = [
+  { rel: '.npmrc', line: `${'TOKEN'}=${'ghp_' + '1234567890abcdefghijklmnop'}` },
+  { rel: '.netrc', line: `${'password'}=${'actual-secret'}` },
+  { rel: '.pypirc', line: `${'password'}=${'actual-secret'}` },
+  { rel: 'kubeconfig', line: `${'access' + 'Token'}=${'actual-secret'}` },
+  { rel: 'Dockerfile', line: `${'ENV OPENAI' + '_API_KEY'}=${'sk-' + '1234567890abcdef'}` },
+  { rel: 'Makefile', line: `${'API' + '_KEY'}=${'actual-secret'}` }
+];
+for (const sample of blockedSecretBearingTextSamples) {
+  if (inspectSecretSafetyLine(sample.line, sample.rel).length === 0) fail(`secret scanner regression allowed secret-bearing text sample: ${sample.rel}`);
 }
 
 const rollbackUnavailableReport = buildRollbackDoctorReport({ planOverride: { ...rollbackExample, rollbackAvailable: false } });

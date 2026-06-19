@@ -12,6 +12,20 @@ const webhookUrlPattern = /https?:\/\/[^\s"')]+webhook[^\s"')]+/i;
 const customerDataPattern = /\b(customer|tenant|client)\s*(email|phone|address|payload|record)\s*[:=]\s*["'][^"']+["']/i;
 const sensitiveCredentialBasenames = new Set(['id_rsa','id_dsa','id_ecdsa','id_ed25519']);
 const sensitiveCredentialExtensions = new Set(['.pem','.key','.p12','.pfx','.cer','.crt','.csr']);
+const secretBearingTextBasenames = new Set([
+  '.npmrc',
+  '.yarnrc',
+  '.pnpmrc',
+  '.netrc',
+  '.pypirc',
+  '.dockerconfigjson',
+  'kubeconfig',
+  'config',
+  'Dockerfile',
+  'Makefile',
+  'dockerfile',
+  'makefile'
+]);
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
@@ -27,10 +41,15 @@ export function isSensitiveCredentialFilename(filePath) {
   return sensitiveCredentialBasenames.has(name) || sensitiveCredentialExtensions.has(extname(name).toLowerCase());
 }
 
+export function isSecretBearingTextFilename(filePath) {
+  return secretBearingTextBasenames.has(basename(filePath));
+}
+
 export function shouldScanSecretSafetyPath(path) {
   const rel = relative(root, path);
   if (rel.includes(`${'.git'}/`)) return false;
   if (isSensitiveCredentialFilename(path)) return true;
+  if (isSecretBearingTextFilename(path)) return true;
   if (basename(path) === '.env.example') return true;
   if (basename(path).startsWith('.env') && basename(path) !== '.env.example') return true;
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
