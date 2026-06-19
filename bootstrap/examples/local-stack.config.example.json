@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "atlasItem": "v0.8-A07",
+  "bootstrapMode": "self_host_local_plan",
+  "operatorProfile": "local_evaluator",
+  "planOnly": true,
+  "publicSafe": true,
+  "privateCoreIncluded": false,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "externalPrerequisitesAcknowledged": [
+    "operator_supplies_external_services_outside_repo",
+    "human_approval_required_before_live",
+    "credentials_stay_outside_git"
+  ]
+}

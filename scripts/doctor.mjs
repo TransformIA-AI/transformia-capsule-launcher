@@ -7,6 +7,8 @@ const recipeDir = join(root, 'connectors', 'recipes');
 const restaurantKitManifestPath = join(root, 'templates', 'restaurant-golden-kit', 'manifest.json');
 const messagesPath = join(root, 'connectors', 'doctor', 'doctor-messages.json');
 const defaultConfigPath = join(root, 'connectors', 'examples', 'local.config.example.json');
+const managedStackManifestPath = join(root, 'bootstrap', 'stack', 'managed.stack.manifest.json');
+const selfHostStackManifestPath = join(root, 'bootstrap', 'stack', 'self-host.stack.manifest.json');
 const suppliedConfigPath = process.argv[2] ? resolve(process.argv[2]) : defaultConfigPath;
 const unsafeConfigKeyPattern = /token|secret|apiKey|webhook|credential|password|provider|account|tenantId/i;
 
@@ -177,6 +179,14 @@ for (const manifest of manifests) {
   } else {
     console.log(`${manifest.displayName}: ${manifest.status === 'stretch' ? 'stretch preview' : 'coming soon'}.`);
   }
+}
+
+if (existsSync(managedStackManifestPath) && existsSync(selfHostStackManifestPath)) {
+  console.log('Stack bootstrap manifests OK.');
+  console.log('Managed Cloud handoff is a plan, not a deploy.');
+  console.log('Self-host local stack bootstrap is plan-only.');
+  console.log('No Docker, n8n, provider or database service is started from launcher.');
+  console.log('Private runtime is not included.');
 }
 
 console.log('Install Doctor no requiere credenciales reales y no llama a proveedores.');

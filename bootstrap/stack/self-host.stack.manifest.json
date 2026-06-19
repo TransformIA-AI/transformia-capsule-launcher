@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.0.0",
+  "atlasItem": "v0.8-A07",
+  "bootstrapMode": "self_host_local_plan",
+  "stackRef": "transformia-self-host-local-stack-plan",
+  "displayName": "Self-host local stack bootstrap plan",
+  "publicSafe": true,
+  "sourceAvailableBoundary": true,
+  "privateCoreIncluded": false,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nExecution": true,
+  "noWebhookServer": true,
+  "noDatabaseProvisioning": true,
+  "noBinaryInstaller": true,
+  "noDockerStart": true,
+  "noCloudDeploy": true,
+  "humanApprovalRequiredBeforeLive": true,
+  "components": [
+    { "componentRef": "capsule_launcher", "role": "Public plan generator and validation shell only." },
+    { "componentRef": "private_runtime_external", "role": "External private runtime boundary supplied through an approved private process, not this repo." },
+    { "componentRef": "web_flagship_external", "role": "External rendered surface boundary." },
+    { "componentRef": "n8n_external_or_managed", "role": "Operator-managed prerequisite outside launcher; launcher does not execute it." },
+    { "componentRef": "evidence_store_external_or_managed", "role": "Operator-managed storage boundary outside launcher." },
+    { "componentRef": "model_gateway_external_or_managed", "role": "Operator-managed model boundary outside launcher." },
+    { "componentRef": "secret_store_external", "role": "Operator-controlled local vault boundary outside this repo." },
+    { "componentRef": "connector_kits_preview", "role": "Public-safe metadata previews only." }
+  ],
+  "requiredLocalCapabilities": [
+    "Git checkout of this public source-available launcher.",
+    "Node.js runtime for local plan validation.",
+    "Operator-owned external services if a later approved self-host activation is pursued.",
+    "Human approval before any future live connection."
+  ],
+  "excludedCapabilities": [
+    "No Docker compose execution or service start.",
+    "No credential collection or .env reading.",
+    "No runtime clone, provider connection, webhook server or database provisioning.",
+    "No binary installer or cloud deployment."
+  ],
+  "operatorNextSteps": [
+    "Run the A07 validator from the public launcher.",
+    "Generate the self-host plan and review missing external prerequisites.",
+    "Prepare external services outside this repo only after Dani-approved live scope.",
+    "Keep credentials outside Git and outside launcher examples."
+  ],
+  "validationCommands": [
+    "npm run -s validate:v0-8-a07-stack-bootstrap",
+    "npm run -s bootstrap:stack-plan -- --mode self-host"
+  ],
+  "publicSafeSummary": "Self-host mode is local stack planning only. The operator supplies local services outside this repo. Launcher does not start Docker, collect credentials, clone runtime code, connect providers or provision databases. Human approval is required before live activation."
+}

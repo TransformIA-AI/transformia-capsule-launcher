@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "atlasItem": "v0.8-A07",
+  "bootstrapMode": "managed_cloud_handoff",
+  "operatorProfile": "managed_evaluator",
+  "planOnly": true,
+  "publicSafe": true,
+  "privateCoreIncluded": false,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "handoffReadiness": [
+    "public_launcher_validated",
+    "private_core_boundary_acknowledged",
+    "human_approval_required_before_live"
+  ]
+}
