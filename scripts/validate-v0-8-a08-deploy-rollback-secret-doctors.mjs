@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { extractAssignment, extractAssignmentKey, extractDockerfileAssignment, extractEmbeddedAssignments, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isScannerInternalPatternLine, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
+import { extractAssignment, extractAssignmentKey, extractCommandAssignments, extractDockerfileAssignment, extractEmbeddedAssignments, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isScannerInternalPatternLine, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -33,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['fileURLToPath', 'resolve(process.argv[1]) === fileURLToPath(import.meta.url)', 'isScannerInternalPatternLine', 'runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'extractEmbeddedAssignments', 'extractDockerfileAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustContain('scripts/secret-safety-check.mjs', ['fileURLToPath', 'resolve(process.argv[1]) === fileURLToPath(import.meta.url)', 'isScannerInternalPatternLine', 'runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'extractCommandAssignments', 'extractEmbeddedAssignments', 'extractDockerfileAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -138,6 +138,42 @@ for (const sample of validatorAllowlistPlaceholderSamples) {
 
 const embeddedEnvAssignment = extractEmbeddedAssignments(`mustContain("fixture", ["${'ENV OPENAI' + '_API_KEY'} real-non-matching-key"])`);
 if (!embeddedEnvAssignment.some((assignment) => assignment.key === 'OPENAI_API_KEY' && assignment.value === 'real-non-matching-key')) fail('embedded assignment extraction missed ENV space-form fixture.');
+
+const slashPrefixedCommandSecretSamples = [
+  `${'/usr/bin/env DATABASE' + '_PASSWORD'}=actual-secret node app.js`,
+  `${'/usr/bin/env OPENAI' + '_API_KEY'}=actual-secret npm start`,
+  `${'/bin/sh -c OPENAI' + '_API_KEY'}=actual-secret npm start`,
+  `${'/bin/bash -lc STRIPE' + '_SECRET_KEY'}=actual-secret`,
+  `${'/usr/bin/env MY' + '_WEBHOOK_URL'}=${'https://' + 'example.com' + '/webhook/abc'}`
+];
+for (const sample of slashPrefixedCommandSecretSamples) {
+  const findings = inspectSecretSafetyLine(sample, 'script.sh');
+  if (!findings.includes('sensitive_key_name_outside_safe_context')) fail(`slash-prefixed command assignment was not blocked: ${sample}`);
+}
+const slashPlaceholderFindings = inspectSecretSafetyLine(`${'/usr/bin/env OPENAI' + '_API_KEY'}=REPLACE_WITH_OPENAI_API_KEY npm start`, 'script.sh');
+if (slashPlaceholderFindings.length !== 0) fail('slash-prefixed placeholder assignment should pass.');
+if (inspectSecretSafetyLine('/usr/bin/env node app.js', 'script.sh').length !== 0) fail('benign slash-prefixed command should pass.');
+const commandAssignments = extractCommandAssignments(`${'/bin/sh -c OPENAI' + '_API_KEY'}=actual-secret npm start`);
+if (!commandAssignments.some((assignment) => assignment.key === 'OPENAI_API_KEY' && assignment.value === 'actual-secret')) fail('command assignment extraction missed slash-prefixed command token.');
+
+const allowedScannerPatternDeclarations = [
+  'const tokenValuePattern = /abc/;',
+  `${'const webhookUrl' + 'Pattern'} = /webhook/;`
+];
+for (const sample of allowedScannerPatternDeclarations) {
+  const findings = inspectSecretSafetyLine(sample, 'scripts/secret-safety-check.mjs');
+  if (findings.length !== 0) fail(`scanner regex Pattern declaration should pass: ${sample}`);
+}
+const blockedScannerPatternDeclarations = [
+  `${'const apiKey' + 'Pattern'} = "actual-secret";`,
+  `${'const webhookUrl' + 'Pattern'} = "actual-secret";`,
+  `${'const password' + 'Pattern'} = "actual-secret";`,
+  `${'const secret' + 'Pattern'} = "actual-secret";`
+];
+for (const sample of blockedScannerPatternDeclarations) {
+  const findings = inspectSecretSafetyLine(sample, 'scripts/secret-safety-check.mjs');
+  if (!findings.includes('sensitive_key_name_outside_safe_context')) fail(`unsafe scanner Pattern string assignment should block: ${sample}`);
+}
 
 const blockedSecretSamples = [
   `{"${'api' + 'Key'}":"actual-secret"}`,

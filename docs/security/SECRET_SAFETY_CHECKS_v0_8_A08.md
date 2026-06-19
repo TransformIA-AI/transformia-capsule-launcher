@@ -55,3 +55,5 @@ Dockerfile `ARG KEY=value`, `ENV KEY=value` and `ENV KEY value` forms are parsed
 ## A08 scanner allowlist safety update
 
 Internal validator/scanner allowlists are fixture-only and never suppress hard token, private-key, webhook, customer-data or sensitive-key assignment findings. Embedded validator fixture assignments are inspected, and allowlisted scanner or validator fixture lines may only suppress non-hard internal pattern false positives.
+
+Slash-prefixed command lines are inspected for sensitive environment assignments, and Pattern variables are only allowlisted when they are actual scanner regex declarations or safe RegExp constructions.

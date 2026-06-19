@@ -83,7 +83,9 @@ export function extractDockerfileAssignment(line) {
 }
 
 export function extractAssignment(line) {
-  if (/^\s*\//.test(String(line ?? ''))) return null;
+  const text = String(line ?? '');
+  if (/^\s*\/(?:\\.|[^/\n])+\/[gimsuy]*[,;]?\s*$/.test(text)) return null;
+  if (/^\s*\/\S+\s+/.test(text)) return null;
   const dockerfileAssignment = extractDockerfileAssignment(line);
   if (dockerfileAssignment) return dockerfileAssignment;
 
@@ -99,6 +101,16 @@ export function extractAssignmentKey(line) {
   return extractAssignment(line)?.key ?? null;
 }
 
+export function extractCommandAssignments(line) {
+  const text = String(line ?? '');
+  const commandAssignments = [];
+  const commandAssignmentPattern = /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=([^\s"'`;)\]]+)/g;
+  for (const match of text.matchAll(commandAssignmentPattern)) {
+    commandAssignments.push({ key: match[1], value: unquote(stripInlineComment(match[2])) });
+  }
+  return commandAssignments;
+}
+
 export function extractEmbeddedAssignments(line) {
   const text = String(line ?? '');
   const candidates = new Set();
@@ -112,10 +124,13 @@ export function extractEmbeddedAssignments(line) {
   }
 
 
-  return [...candidates]
-    .filter((candidate) => !/[\\[\]]/.test(candidate))
-    .map((candidate) => extractAssignment(candidate))
-    .filter(Boolean);
+  return [
+    ...[...candidates]
+      .filter((candidate) => !/[\\[\]]/.test(candidate))
+      .map((candidate) => extractAssignment(candidate))
+      .filter(Boolean),
+    ...extractCommandAssignments(text)
+  ];
 }
 
 export function normalizeAssignmentKey(key) {
@@ -197,10 +212,20 @@ export function shouldScanSecretSafetyPath(path) {
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
 }
 
+function isAllowedScannerPatternDeclaration(assignment, rel) {
+  if (!assignment || !/scripts\/secret-safety-check\.mjs$/.test(normalizePathForPolicy(rel))) return false;
+  if (!/pattern$/i.test(String(assignment.key ?? ''))) return false;
+  const value = String(assignment.value ?? '').trim();
+  if (isHardSecretValue(value)) return false;
+  return /^\/(?:\\.|[^/\n])+\/[gimsuy]*$/.test(value) || /^new\s+RegExp\s*\(/.test(value);
+}
+
 function isUnsafeSensitiveAssignment(assignment, rel) {
-  if (/scripts\/secret-safety-check\.mjs$/.test(normalizePathForPolicy(rel)) && /pattern$/i.test(String(assignment?.key ?? ''))) return false;
+  if (isAllowedScannerPatternDeclaration(assignment, rel)) return false;
+  const key = String(assignment?.key ?? '');
+  const patternBaseKey = /pattern$/i.test(key) ? key.replace(/pattern$/i, '') : key;
   return assignment
-    && isSensitiveAssignmentKey(assignment.key)
+    && (isSensitiveAssignmentKey(key) || isSensitiveAssignmentKey(patternBaseKey))
     && !isPlaceholderValue(assignment.value, rel)
     && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value);
 }
