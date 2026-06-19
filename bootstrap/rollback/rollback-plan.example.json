@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0.0",
+  "atlasItem": "v0.8-A08",
+  "rollbackPlanRef": "transformia-launcher-public-safe-rollback-plan-example",
+  "stackRef": "transformia-a07-bootstrap-stack-plan",
+  "rollbackMode": "operator_review_plan_only",
+  "rollbackAvailable": true,
+  "rollbackStepsPublicSafe": [
+    "Review the prior approved launcher release notes and changed public-safe configuration files.",
+    "Confirm with Dani whether the operator should return to the previous reviewed launcher plan.",
+    "Prepare a human-reviewed git revert or configuration restoration outside any live system.",
+    "Run launcher validators again before any later approved activation path."
+  ],
+  "requiredHumanApprovalBeforeRollback": true,
+  "noRollbackPerformed": true,
+  "noDeletePerformed": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noSecretsIncluded": true,
+  "evidenceExpected": [
+    "A07 bootstrap manifest under review.",
+    "A08 doctor output saved by the operator if needed.",
+    "Human approval record outside this public repository."
+  ],
+  "operatorNextSteps": [
+    "Run npm run -s doctor:rollback for shape validation.",
+    "Keep all credentials, provider consoles and operator data outside the launcher repository.",
+    "Use a later Dani-approved PR for any real rollback execution capability."
+  ],
+  "publicSafeSummary": "This example is a rollback readiness plan only. It contains no secret, provider payload, operator data, deletion command, live rollback action or private runtime code."
+}
