@@ -39,3 +39,7 @@ Common secret-bearing dotfiles and config files are scanned line by line, includ
 ## A08 provider-prefixed and text-source scan update
 
 Provider-prefixed key names such as `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `DATABASE_PASSWORD` and `MY_WEBHOOK_URL` are detected when they appear in assignment-like lines with non-placeholder values. Common text/source/config files such as `.sh`, `.py`, `.ts`, `.tsx`, `.toml`, `.ini` and `.html` are scanned. The scanner remains pattern-based and conservative.
+
+## A08 policy refactor update
+
+Placeholder safety is value-based, not prose/comment-based: comments such as `example` or `must stay outside` do not make a non-placeholder sensitive assignment safe. Standard credential paths such as `.aws/credentials`, `.aws/config`, `.kube/config` and `.docker/config.json` are scanned line by line. The scanner remains static, conservative and inspection-only.

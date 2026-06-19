@@ -45,3 +45,9 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 - Provider-prefixed key names are detected in assignment-like contexts when values are not placeholder-safe.
 - Common text/source/config files are scanned, including `.sh`, `.py`, `.ts`, `.tsx`, `.toml`, `.ini` and `.html`.
 - The scanner remains pattern-based and conservative.
+
+## A08 secret policy and rollback evidence hardening
+
+- Placeholder safety is now value-based rather than prose/comment-based.
+- Standard credential paths such as `.aws/credentials` are scanned line by line.
+- Rollback readiness requires non-empty rollback steps, expected evidence and operator next steps.

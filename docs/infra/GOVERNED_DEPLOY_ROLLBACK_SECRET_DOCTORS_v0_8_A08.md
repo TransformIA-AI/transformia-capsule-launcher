@@ -35,3 +35,7 @@ Rollback readiness now requires `rollbackAvailable: true`. A rollback plan that 
 ## A08 validator hardening update
 
 The A08 validator now fails if the checked-in rollback doctor report is not OK, has blockers or does not report `rollback_plan_ready_for_operator_review` for the public rollback example.
+
+## A08 rollback readiness evidence update
+
+Rollback readiness requires non-empty `rollbackStepsPublicSafe`, `evidenceExpected` and `operatorNextSteps` arrays in addition to the no-rollback/no-delete/no-provider/no-live/no-secret flags.

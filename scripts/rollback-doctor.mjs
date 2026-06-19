@@ -22,7 +22,9 @@ export function validateRollbackPlan(plan) {
   }
   if (plan.requiredHumanApprovalBeforeRollback !== true) blockers.push('Rollback plan must require human approval.');
   if (plan.noRollbackPerformed !== true || plan.noDeletePerformed !== true || plan.noProviderCall !== true || plan.noLiveExecution !== true || plan.noSecretsIncluded !== true) blockers.push('Rollback plan must assert no rollback, delete, provider call, live execution or secrets.');
-  if (!Array.isArray(plan.rollbackStepsPublicSafe) || plan.rollbackStepsPublicSafe.length === 0) warnings.push('Rollback plan should include public-safe operator review steps.');
+  if (!Array.isArray(plan.rollbackStepsPublicSafe) || plan.rollbackStepsPublicSafe.length === 0) blockers.push('Rollback plan must include public-safe rollback steps.');
+  if (!Array.isArray(plan.evidenceExpected) || plan.evidenceExpected.length === 0) blockers.push('Rollback plan must include expected evidence.');
+  if (!Array.isArray(plan.operatorNextSteps) || plan.operatorNextSteps.length === 0) blockers.push('Rollback plan must include operator next steps.');
 
   return { blockers, warnings, publicReasonCodes };
 }

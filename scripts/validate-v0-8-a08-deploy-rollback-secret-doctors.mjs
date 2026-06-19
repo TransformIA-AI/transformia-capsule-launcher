@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { extractAssignmentKey, inspectSecretSafetyLine, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
+import { extractAssignment, extractAssignmentKey, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -31,10 +31,10 @@ for (const scriptName of ['doctor:deploy','doctor:rollback','secrets:check','val
 if (!/validate:v0-8-a08-deploy-rollback-secret-doctors/.test(packageJson.scripts?.quality ?? '')) fail('quality script must include A08 validator.');
 if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? '')) fail('quality script must retain A07 validator.');
 
-mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
+mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'extractAssignmentKey', 'isSensitiveAssignmentKey', 'isSensitiveCredentialFilename', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead', 'if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;']);
-mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
+mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'extractAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
   mustContain(doc, ['v0.8-A08','A07','no deploy','no rollback','no secret manager','no provider call','no live execution','no private runtime','no cloud provisioning','no DB','no auth','no telemetry']);
@@ -85,6 +85,10 @@ const blockedSecretSamples = [
   `{"${'password'}":"actual-secret"}`,
   `${'api' + '_key'}=actual-secret`,
   `${'OPENAI' + '_API_KEY'}=actual-secret`,
+  `${'OPENAI' + '_API_KEY'}=actual-secret # example`,
+  `${'OPENAI' + '_API_KEY'}=actual-secret # must stay outside`,
+  `${'AWS' + '_ACCESS_KEY_ID'}=actual-secret`,
+  `${'AWS' + '_SECRET_ACCESS_KEY'}=actual-secret`,
   `${'STRIPE' + '_SECRET_KEY'}=actual-secret`,
   `${'DATABASE' + '_PASSWORD'}=actual-secret`,
   `${'MY' + '_WEBHOOK_URL'}=actual-secret`,
@@ -102,10 +106,16 @@ const blockedSecretSamples = [
 for (const sample of blockedSecretSamples) {
   if (!inspectSecretSafetyLine(sample, 'in-memory-regression.json').includes('sensitive_key_name_outside_safe_context')) fail('secret scanner regression missed blocked sensitive key sample.');
 }
-for (const key of ['OPENAI_API_KEY','STRIPE_SECRET_KEY','DATABASE_PASSWORD','MY_WEBHOOK_URL','MY_ACCESS_TOKEN','MY_REFRESH_TOKEN','MY_CLIENT_SECRET','MY_PRIVATE_KEY','PROVIDER_PAYLOAD','databasePassword','clientSecret','privateKey']) {
+for (const key of ['OPENAI_API_KEY','STRIPE_SECRET_KEY','DATABASE_PASSWORD','MY_WEBHOOK_URL','MY_ACCESS_TOKEN','MY_REFRESH_TOKEN','MY_CLIENT_SECRET','MY_PRIVATE_KEY','PROVIDER_PAYLOAD','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','databasePassword','clientSecret','privateKey']) {
   if (!isSensitiveAssignmentKey(key)) fail(`secret scanner regression missed sensitive assignment key: ${key}`);
 }
 if (extractAssignmentKey(`${'OPENAI' + '_API_KEY'}=actual-secret`) !== 'OPENAI_API_KEY') fail('secret scanner regression failed to extract provider-prefixed assignment key.');
+const extractedAssignment = extractAssignment(`${'OPENAI' + '_API_KEY'}=actual-secret # example`);
+if (extractedAssignment?.key !== 'OPENAI_API_KEY' || extractedAssignment.value !== 'actual-secret') fail('secret scanner regression failed value-based assignment extraction.');
+if (normalizeAssignmentKey('STRIPE_SECRET_KEY') !== 'stripesecretkey') fail('secret scanner regression failed assignment key normalization.');
+if (!isPlaceholderValue('REPLACE_WITH_OPENAI_API_KEY', '.env.example')) fail('secret scanner regression rejected explicit placeholder value.');
+if (isPlaceholderValue('actual-secret # example', '.env.example')) fail('secret scanner regression treated prose/comment as placeholder.');
+if (!isHardSecretValue(`${'sk-' + '1234567890abcdef'} # example`)) fail('secret scanner regression missed hard token value.');
 const allowedSecretSamples = [
   `{"${'api' + 'Key'}":"REPLACE_WITH_API_KEY"}`,
   `${'api' + '_key'}=REPLACE_WITH_API_KEY`,
@@ -113,6 +123,8 @@ const allowedSecretSamples = [
   `${'API' + '_KEY'}=<API_KEY_PLACEHOLDER>`,
   `${'OPENAI' + '_API_KEY'}=REPLACE_WITH_OPENAI_API_KEY`,
   `${'STRIPE' + '_SECRET_KEY'}=<STRIPE_SECRET_KEY_PLACEHOLDER>`,
+  `${'DATABASE' + '_PASSWORD'}=YOUR_DATABASE_PASSWORD`,
+  `${'API' + '_KEY'}=`,
   `{"${'DATABASE' + '_PASSWORD'}":"REPLACE_WITH_DATABASE_PASSWORD"}`
 ];
 for (const sample of allowedSecretSamples) {
@@ -138,11 +150,18 @@ for (const path of ['.npmrc','.netrc','.pypirc','kubeconfig','Dockerfile','Makef
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped secret-bearing text path: ${path}`);
 }
 
+for (const path of ['.aws/credentials','.aws/config','.kube/config','.docker/config.json']) {
+  if (!isCredentialPath(path)) fail(`secret scanner regression missed credential path: ${path}`);
+  if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped credential path: ${path}`);
+}
+
 for (const path of ['script.sh','shell.bash','shell.zsh','tool.py','component.ts','component.tsx','view.jsx','index.html','style.css','style.scss','config.toml','settings.ini','service.conf','app.cfg','app.properties','data.xml','data.csv']) {
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped common text/source path: ${path}`);
 }
 
 const blockedSecretBearingTextSamples = [
+  { rel: '.aws/credentials', line: `${'AWS' + '_ACCESS_KEY_ID'}=actual-secret` },
+  { rel: '.aws/credentials', line: `${'AWS' + '_SECRET_ACCESS_KEY'}=actual-secret` },
   { rel: '.npmrc', line: `${'TOKEN'}=${'ghp_' + '1234567890abcdefghijklmnop'}` },
   { rel: '.netrc', line: `${'password'}=${'actual-secret'}` },
   { rel: '.pypirc', line: `${'password'}=${'actual-secret'}` },
@@ -165,6 +184,16 @@ const rollbackUnavailableReport = buildRollbackDoctorReport({ planOverride: { ..
 if (rollbackUnavailableReport.ok !== false) fail('rollbackAvailable false must fail rollback readiness.');
 if (rollbackUnavailableReport.rollbackReadinessStatus === 'rollback_plan_ready_for_operator_review') fail('rollbackAvailable false must not be ready for operator review.');
 if (!rollbackUnavailableReport.publicReasonCodes.includes('blocked_rollback_unavailable')) fail('rollbackAvailable false must emit blocked_rollback_unavailable.');
+for (const [field, expectedBlocker] of [
+  ['evidenceExpected', 'Rollback plan must include expected evidence.'],
+  ['operatorNextSteps', 'Rollback plan must include operator next steps.'],
+  ['rollbackStepsPublicSafe', 'Rollback plan must include public-safe rollback steps.']
+]) {
+  const report = buildRollbackDoctorReport({ planOverride: { ...rollbackExample, [field]: [] } });
+  if (report.ok !== false) fail(`${field} empty array must fail rollback readiness.`);
+  if (report.rollbackReadinessStatus === 'rollback_plan_ready_for_operator_review') fail(`${field} empty array must not be ready for operator review.`);
+  if (!report.blockers.includes(expectedBlocker)) fail(`${field} empty array must emit expected blocker.`);
+}
 
 if (errors.length) {
   console.error('v0.8-A08 deploy/rollback/secret doctors validator failed.');

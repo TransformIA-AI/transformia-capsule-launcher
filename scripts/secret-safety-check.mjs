@@ -3,9 +3,7 @@ import { basename, extname, join, relative } from 'node:path';
 
 const root = process.cwd();
 const ignoredDirs = new Set(['.git','node_modules','dist','build','coverage','.next']);
-const scanExtensions = new Set(['.js','.mjs','.json','.md','.txt','.yml','.yaml','.example','.sh','.bash','.zsh','.env','.py','.ts','.tsx','.jsx','.html','.css','.scss','.toml','.ini','.conf','.cfg','.properties','.xml','.csv']);
-const placeholderPattern = /(<[^>]+>|YOUR_[A-Z0-9_]+|REPLACE_WITH_[A-Z0-9_]+|example|placeholder|public-safe|boundary|no secrets|no secret|not include|must stay outside|does not ask|sin credenciales|no requiere)/i;
-const sensitiveKeyPattern = /["']?\b(api[_-]?key|apiKey|access[_-]?token|accessToken|refresh[_-]?token|refreshToken|client[_-]?secret|clientSecret|private[_-]?key|privateKey|provider[_-]?payload|providerPayload|webhook[_-]?url|webhookUrl|password|credential|secret)\b["']?\s*[:=]/i;
+const scanExtensions = new Set(['.js','.mjs','.ts','.tsx','.jsx','.json','.md','.txt','.yml','.yaml','.example','.sh','.bash','.zsh','.env','.py','.html','.css','.scss','.toml','.ini','.conf','.cfg','.properties','.xml','.csv']);
 const tokenValuePattern = /\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/;
 const privateKeyPattern = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 const webhookUrlPattern = /https?:\/\/[^\s"')]+webhook[^\s"')]+/i;
@@ -26,6 +24,12 @@ const secretBearingTextBasenames = new Set([
   'dockerfile',
   'makefile'
 ]);
+const credentialPathSuffixes = [
+  '.aws/credentials',
+  '.aws/config',
+  '.kube/config',
+  '.docker/config.json'
+];
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
@@ -36,47 +40,44 @@ function walk(dir) {
   });
 }
 
-export function isSensitiveCredentialFilename(filePath) {
-  const name = basename(filePath);
-  return sensitiveCredentialBasenames.has(name) || sensitiveCredentialExtensions.has(extname(name).toLowerCase());
+function normalizePathForPolicy(filePath) {
+  return filePath.replaceAll('\\\\', '/');
 }
 
-export function isSecretBearingTextFilename(filePath) {
-  return secretBearingTextBasenames.has(basename(filePath));
+function stripInlineComment(value) {
+  let quote = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if ((char === '"' || char === "'") && value[index - 1] !== '\\') quote = quote === char ? null : (quote ?? char);
+    if (char === '#' && !quote) return value.slice(0, index).trim();
+  }
+  return value.trim();
 }
 
-export function shouldScanSecretSafetyPath(path) {
-  const rel = relative(root, path);
-  if (rel.includes(`${'.git'}/`)) return false;
-  if (isSensitiveCredentialFilename(path)) return true;
-  if (isSecretBearingTextFilename(path)) return true;
-  if (basename(path) === '.env.example') return true;
-  if (basename(path).startsWith('.env') && basename(path) !== '.env.example') return true;
-  return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
+function unquote(value) {
+  return value.replace(/^(["'])(.*)\1$/, '$2');
 }
 
-function extractAssignmentValue(line) {
-  const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?[^"'\s:=]+["']?\s*[:=]\s*(.+?)\s*[,;}]?\s*$/i);
-  return match ? match[1].trim().replace(/^(["'])(.*)\1$/, '$2') : null;
-}
-
-function safeContext(line, rel) {
-  if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;
-  const assignmentValue = extractAssignmentValue(line);
-  if (/^(true|false|null|undefined|0|1)$/i.test(assignmentValue ?? '')) return true;
-  if (rel.endsWith('.env.example')) return placeholderPattern.test(line);
-  return placeholderPattern.test(line);
+export function extractAssignment(line) {
+  const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?([^"'\s:=]+)["']?\s*[:=]\s*(.*?)\s*[,;}]?\s*$/i);
+  if (!match) return null;
+  return { key: match[1], value: unquote(stripInlineComment(match[2])) };
 }
 
 export function extractAssignmentKey(line) {
-  const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?([^"'\s:=]+)["']?\s*[:=]/i);
-  return match ? match[1] : null;
+  return extractAssignment(line)?.key ?? null;
+}
+
+export function normalizeAssignmentKey(key) {
+  return typeof key === 'string' ? key.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 }
 
 export function isSensitiveAssignmentKey(key) {
-  if (typeof key !== 'string' || !key.trim()) return false;
-  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalized = normalizeAssignmentKey(key);
+  if (!normalized) return false;
   return normalized.endsWith('apikey')
+    || normalized.endsWith('accesskeyid')
+    || normalized.endsWith('secretaccesskey')
     || normalized.endsWith('accesstoken')
     || normalized.endsWith('refreshtoken')
     || normalized.endsWith('clientsecret')
@@ -88,6 +89,8 @@ export function isSensitiveAssignmentKey(key) {
     || normalized.endsWith('secret')
     || normalized.endsWith('secretkey')
     || normalized.includes('apikey')
+    || normalized.includes('accesskeyid')
+    || normalized.includes('secretaccesskey')
     || normalized.includes('accesstoken')
     || normalized.includes('refreshtoken')
     || normalized.includes('clientsecret')
@@ -97,16 +100,62 @@ export function isSensitiveAssignmentKey(key) {
     || normalized.includes('secretkey');
 }
 
+function isExampleRel(rel) {
+  return rel.endsWith('.env.example') || rel.includes('/examples/') || rel.endsWith('.example') || rel.endsWith('.example.json');
+}
+
+export function isPlaceholderValue(value, rel = '') {
+  const normalized = unquote(stripInlineComment(String(value ?? ''))).trim();
+  if (normalized === '') return isExampleRel(normalizePathForPolicy(rel));
+  return /^REPLACE_WITH_[A-Z0-9_]+$/.test(normalized)
+    || /^YOUR_[A-Z0-9_]+$/.test(normalized)
+    || /^<[A-Z0-9_ -]+>$/.test(normalized)
+    || normalized === 'placeholder'
+    || normalized === 'example'
+    || normalized === 'example_value';
+}
+
+export function isHardSecretValue(value) {
+  const normalized = String(value ?? '');
+  return tokenValuePattern.test(normalized) || privateKeyPattern.test(normalized) || webhookUrlPattern.test(normalized);
+}
+
+export function isSensitiveCredentialFilename(filePath) {
+  const name = basename(filePath);
+  return sensitiveCredentialBasenames.has(name) || sensitiveCredentialExtensions.has(extname(name).toLowerCase());
+}
+
+export function isCredentialPath(filePath) {
+  const normalized = normalizePathForPolicy(filePath);
+  return credentialPathSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`/${suffix}`));
+}
+
+export function isSecretBearingTextFilename(filePath) {
+  return secretBearingTextBasenames.has(basename(filePath));
+}
+
+export function shouldScanSecretSafetyPath(path) {
+  const rel = normalizePathForPolicy(relative(root, path));
+  if (rel.includes(`${'.git'}/`)) return false;
+  if (isSensitiveCredentialFilename(path)) return true;
+  if (isCredentialPath(rel)) return true;
+  if (isSecretBearingTextFilename(path)) return true;
+  if (basename(path) === '.env.example') return true;
+  if (basename(path).startsWith('.env') && basename(path) !== '.env.example') return true;
+  return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
+}
+
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
   if (/scripts\/validate-.*\.mjs$/.test(rel) && (/credential-shaped string|forbidden|pattern\.test/.test(line) || /^\s*\//.test(line))) return [];
   const finding = [];
-  if (privateKeyPattern.test(line) && !safeContext(line, rel)) finding.push('private_key_block');
-  if (tokenValuePattern.test(line) && !safeContext(line, rel)) finding.push('token_or_api_key_value');
-  if (webhookUrlPattern.test(line) && !safeContext(line, rel)) finding.push('webhook_url');
-  const assignmentKey = extractAssignmentKey(line);
-  if ((sensitiveKeyPattern.test(line) || isSensitiveAssignmentKey(assignmentKey)) && !safeContext(line, rel)) finding.push('sensitive_key_name_outside_safe_context');
-  if (customerDataPattern.test(line) && !safeContext(line, rel)) finding.push('raw_customer_data_pattern');
-  return finding;
+  const assignment = extractAssignment(line);
+  const value = assignment?.value ?? line;
+  if (privateKeyPattern.test(value)) finding.push('private_key_block');
+  if (tokenValuePattern.test(value)) finding.push('token_or_api_key_value');
+  if (webhookUrlPattern.test(value)) finding.push('webhook_url');
+  if (assignment && isSensitiveAssignmentKey(assignment.key) && !isPlaceholderValue(assignment.value, rel) && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value)) finding.push('sensitive_key_name_outside_safe_context');
+  if (customerDataPattern.test(line) && !(assignment && isPlaceholderValue(assignment.value, rel))) finding.push('raw_customer_data_pattern');
+  return [...new Set(finding)];
 }
 
 export function runSecretSafetyCheck() {
