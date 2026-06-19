@@ -1,0 +1,25 @@
+# Secret safety checks v0.8-A08
+
+Exact Atlas item: `v0.8-A08`.
+
+## Purpose
+
+The secret safety checker protects the public source-available launcher from accidental secret-like material while keeping A07 bootstrap planning public-safe.
+
+## Dependency on A07
+
+The checker is part of the A08 hardening layer around A07 managed and self-host bootstrap plans. A07 remains plan-only and must not collect credentials.
+
+## Behavior
+
+Run `npm run -s secrets:check` to perform a static repository scan. The checker blocks real `.env` files, private key blocks, webhook URLs, token/API-key-like values, unsafe secret key names outside safe documentation context and raw customer data patterns.
+
+## Boundary
+
+This is no secret manager and no secret store reader. It does not ask for credentials, access vaults, call providers, perform live execution, deploy, rollback, include private runtime, provision cloud infrastructure, use DB clients, implement auth or add telemetry.
+
+Documented placeholders and `.env.example` remain allowed when they are clearly public-safe examples. Real credentials must stay outside Git and outside this launcher repository.
+
+Only a later approved PR may add real deployment, auth, secret manager integration or rollback execution.
+
+Required explicit A08 boundary wording: no deploy, no rollback, no secret manager, no provider call, no live execution, no private runtime, no cloud provisioning, no DB, no auth, no telemetry.

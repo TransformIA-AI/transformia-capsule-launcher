@@ -99,6 +99,20 @@ npm run -s validate:v0-8-a07-stack-bootstrap
 
 Use `npm run -s bootstrap:stack-plan -- --mode managed` for the managed Cloud handoff plan and `npm run -s bootstrap:stack-plan -- --mode self-host` for the self-host local stack plan.
 
+
+## v0.8-A08 Governed deploy and rollback doctors
+
+The v0.8-A08 hardening layer adds governed deploy readiness, rollback readiness and secret safety checks around the A07 stack bootstrap plans.
+
+```bash
+npm run -s doctor:deploy
+npm run -s doctor:rollback
+npm run -s secrets:check
+npm run -s validate:v0-8-a08-deploy-rollback-secret-doctors
+```
+
+These are inspection and readiness tools only. They do not deploy, rollback, start services, access secrets, connect providers or include private runtime.
+
 ## Local/BYOK config scaffold
 
 The local/BYOK config scaffold is documented in [`config/README.md`](config/README.md) and [`docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`](docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md). It is placeholder-only and non-executable.

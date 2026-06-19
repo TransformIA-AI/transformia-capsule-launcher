@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TransformIA Capsule Launcher A08 rollback plan schema",
+  "type": "object",
+  "required": [
+    "rollbackPlanRef",
+    "stackRef",
+    "rollbackMode",
+    "rollbackAvailable",
+    "rollbackStepsPublicSafe",
+    "requiredHumanApprovalBeforeRollback",
+    "noRollbackPerformed",
+    "noDeletePerformed",
+    "noProviderCall",
+    "noLiveExecution",
+    "noSecretsIncluded",
+    "evidenceExpected",
+    "operatorNextSteps"
+  ],
+  "properties": {
+    "rollbackPlanRef": { "type": "string" },
+    "stackRef": { "type": "string" },
+    "rollbackMode": { "const": "operator_review_plan_only" },
+    "rollbackAvailable": { "type": "boolean" },
+    "rollbackStepsPublicSafe": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "requiredHumanApprovalBeforeRollback": { "const": true },
+    "noRollbackPerformed": { "const": true },
+    "noDeletePerformed": { "const": true },
+    "noProviderCall": { "const": true },
+    "noLiveExecution": { "const": true },
+    "noSecretsIncluded": { "const": true },
+    "evidenceExpected": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "operatorNextSteps": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "publicSafeSummary": { "type": "string" }
+  },
+  "additionalProperties": true
+}

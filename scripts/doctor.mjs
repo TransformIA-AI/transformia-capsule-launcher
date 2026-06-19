@@ -189,4 +189,8 @@ if (existsSync(managedStackManifestPath) && existsSync(selfHostStackManifestPath
   console.log('Private runtime is not included.');
 }
 
+console.log('Governed Deploy Doctor available.');
+console.log('Rollback Doctor available.');
+console.log('Secret safety checks available.');
+console.log('No deploy, rollback or secret access is performed by launcher.');
 console.log('Install Doctor no requiere credenciales reales y no llama a proveedores.');
