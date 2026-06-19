@@ -47,3 +47,7 @@ Placeholder safety is value-based, not prose/comment-based: comments such as `ex
 ## A08 source declaration scan update
 
 JavaScript and TypeScript source declarations such as `const`, `let`, `var` and `export const` are parsed for sensitive assignment keys. Placeholder-safe source declarations remain allowed, but non-placeholder provider-prefixed assignments are blocked. Standard credential paths such as `.aws/credentials` remain covered.
+
+## A08 Dockerfile ARG/ENV scan update
+
+Dockerfile `ARG KEY=value`, `ENV KEY=value` and `ENV KEY value` forms are parsed for sensitive assignments. `ARG KEY` without a default value is not treated as a leaked secret by itself. Placeholder Dockerfile values remain allowed, and the scanner remains pattern-based and conservative.

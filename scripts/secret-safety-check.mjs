@@ -58,11 +58,31 @@ function unquote(value) {
   return value.replace(/^(["'])(.*)\1$/, '$2');
 }
 
+export function extractDockerfileAssignment(line) {
+  const argMatch = line.match(/^\s*ARG\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*(.*?))?\s*$/i);
+  if (argMatch) {
+    if (argMatch[2] === undefined) return null;
+    return { key: argMatch[1], value: unquote(stripInlineComment(argMatch[2])) };
+  }
+
+  const envMatch = line.match(/^\s*ENV\s+(.+?)\s*$/i);
+  if (!envMatch) return null;
+  const envBody = envMatch[1].trim();
+  const keyValueMatch = envBody.match(/^([A-Za-z_][A-Za-z0-9_]*)=(\S+)/);
+  if (keyValueMatch) return { key: keyValueMatch[1], value: unquote(stripInlineComment(keyValueMatch[2])) };
+  const spaceFormMatch = envBody.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+(.+?)\s*$/);
+  if (spaceFormMatch) return { key: spaceFormMatch[1], value: unquote(stripInlineComment(spaceFormMatch[2])) };
+  return null;
+}
+
 export function extractAssignment(line) {
+  const dockerfileAssignment = extractDockerfileAssignment(line);
+  if (dockerfileAssignment) return dockerfileAssignment;
+
   const sourceDeclaration = line.match(/^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(.*?)\s*;?\s*$/);
   if (sourceDeclaration) return { key: sourceDeclaration[1], value: unquote(stripInlineComment(sourceDeclaration[2])) };
 
-  const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?([^"'\s:=]+)["']?\s*[:=]\s*(.*?)\s*[,;}]?\s*$/i);
+  const match = line.match(/^\s*\{?\s*(?:export\s+|set\s+)?["']?([^"'\s:=]+)["']?\s*[:=]\s*(.*?)\s*[,;}]?\s*$/i);
   if (!match) return null;
   return { key: match[1], value: unquote(stripInlineComment(match[2])) };
 }

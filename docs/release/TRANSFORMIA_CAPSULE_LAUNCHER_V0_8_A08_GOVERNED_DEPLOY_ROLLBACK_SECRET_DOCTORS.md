@@ -57,3 +57,9 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 - JavaScript and TypeScript `const`, `let`, `var` and exported source declarations are scanned for sensitive assignments.
 - `rollbackAvailable` is schema-constrained to `true`.
 - `.aws/credentials` and standard credential paths remain covered by validator regressions and negative checks.
+
+## A08 Dockerfile ARG/ENV secret scan hardening
+
+- Dockerfile `ARG KEY=value`, `ENV KEY=value` and `ENV KEY value` secret-bearing assignments are detected.
+- `ARG KEY` without a default value is not blocked solely by key name.
+- Placeholder Dockerfile values remain allowed.
