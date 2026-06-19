@@ -50,6 +50,8 @@ npm run -s quality
 
 Expected result: validators confirm the public launcher docs, template manifests, local/BYOK placeholders and launch assets are internally consistent.
 
+This launcher currently has no dependency lockfile; local gauntlet runs may use npm with `--ignore-scripts --no-audit --no-fund` or run npm scripts directly instead of `npm ci`.
+
 This quickstart is deliberately validation-only. It does not create a real `.env` file, request credentials, configure providers, clone private code or execute connectors.
 
 For the step-by-step path, see [`QUICKSTART.md`](QUICKSTART.md).

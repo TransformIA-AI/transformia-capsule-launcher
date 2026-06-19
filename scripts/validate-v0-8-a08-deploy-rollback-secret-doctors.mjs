@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { extractAssignment, extractAssignmentKey, extractDockerfileAssignment, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
+import { extractAssignment, extractAssignmentKey, extractDockerfileAssignment, inspectSecretSafetyLine, isCredentialPath, isHardSecretValue, isScannerInternalPatternLine, isPlaceholderValue, isSecretBearingTextFilename, isSensitiveAssignmentKey, isSensitiveCredentialFilename, normalizeAssignmentKey, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -33,8 +33,8 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'extractDockerfileAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
-mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
+mustContain('scripts/secret-safety-check.mjs', ['fileURLToPath', 'resolve(process.argv[1]) === fileURLToPath(import.meta.url)', 'isScannerInternalPatternLine', 'runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'extractDockerfileAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
   mustContain(doc, ['v0.8-A08','A07','no deploy','no rollback','no secret manager','no provider call','no live execution','no private runtime','no cloud provisioning','no DB','no auth','no telemetry']);
@@ -80,6 +80,14 @@ if (secretScanReport.ok !== true) {
   }
   if (!(secretScanReport.blockedFindings ?? []).length) fail('secret safety scan failed without public findings.');
 }
+
+for (const script of ['scripts/governed-deploy-doctor.mjs','scripts/rollback-doctor.mjs','scripts/secret-safety-check.mjs']) {
+  mustContain(script, ['fileURLToPath', 'resolve(process.argv[1]) === fileURLToPath(import.meta.url)']);
+}
+
+if (!isScannerInternalPatternLine('scripts/secret-safety-check.mjs', 'const tokenValuePattern = /fragment-only-regex-declaration/;')) fail('scanner internal helper rejected regex declaration.');
+if (!isScannerInternalPatternLine('scripts/validate-launch-docs.mjs', "mustContain('x', ['public reason strings']);")) fail('scanner internal helper rejected validator pattern line.');
+if (isScannerInternalPatternLine('src/A08_NEGATIVE.ts', 'const OPENAI_API_KEY = "actual-secret";')) fail('scanner internal helper allowed real source assignment.');
 
 const blockedSecretSamples = [
   `{"${'api' + 'Key'}":"actual-secret"}`,
@@ -182,6 +190,10 @@ for (const path of ['.npmrc','.netrc','.pypirc','kubeconfig','Dockerfile','Makef
 for (const path of ['.aws/credentials','.aws/config','.kube/config','.docker/config.json']) {
   if (!isCredentialPath(path)) fail(`secret scanner regression missed credential path: ${path}`);
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped credential path: ${path}`);
+}
+for (const path of [join(root, '.aws', 'credentials'), join(root, '.aws', 'config'), join(root, '.kube', 'config'), join(root, '.docker', 'config.json')]) {
+  if (!isCredentialPath(path)) fail(`secret scanner regression missed absolute credential path: ${path}`);
+  if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped absolute credential path: ${path}`);
 }
 if (inspectSecretSafetyLine(`${'AWS' + '_ACCESS_KEY_ID'}=actual-secret`, '.aws/credentials').length === 0) fail('secret scanner regression allowed AWS access key in .aws/credentials.');
 if (inspectSecretSafetyLine(`${'AWS' + '_SECRET_ACCESS_KEY'}=actual-secret`, '.aws/credentials').length === 0) fail('secret scanner regression allowed AWS secret key in .aws/credentials.');

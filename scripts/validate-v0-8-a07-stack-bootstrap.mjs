@@ -129,6 +129,10 @@ const requiredPlannerSourceSnippets = [
   'Unknown bootstrap mode.',
   'Config bootstrapMode is unknown.',
   'Config bootstrapMode differs from selected mode.',
+  'export function parseArgs(argv)',
+  "if (arg === '--') continue;",
+  "arg.startsWith('--mode=')",
+  "arg.startsWith('--config=')",
   'return config.bootstrapMode;',
   "return 'self_host_local_plan';"
 ];
@@ -152,7 +156,16 @@ function runPlanner(args, expectedStatus, expectedText) {
   if (expectedText && !output.includes(expectedText)) errors.push(`planner ${args.join(' ')} missing output: ${expectedText}`);
 }
 
+runPlanner(['--mode', 'managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--mode=managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--', '--mode', 'managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--', '--mode=managed'], 0, 'Mode: managed_cloud_handoff');
+runPlanner(['--mode', 'self-host'], 0, 'Mode: self_host_local_plan');
+runPlanner(['--mode=self-host'], 0, 'Mode: self_host_local_plan');
+runPlanner(['--', '--mode', 'self-host'], 0, 'Mode: self_host_local_plan');
+runPlanner(['--', '--mode=self-host'], 0, 'Mode: self_host_local_plan');
 runPlanner(['--mode', 'managedd'], 1, 'Unknown bootstrap mode.');
+runPlanner(['--', '--mode', 'managedd'], 1, 'Unknown bootstrap mode.');
 runPlanner(['--mode', 'local'], 1, 'Unknown bootstrap mode.');
 runPlanner(['--config', 'bootstrap/examples/managed-cloud-handoff.example.json'], 0, 'Mode: managed_cloud_handoff');
 runPlanner(['--mode', 'self-host', '--config', 'bootstrap/examples/managed-cloud-handoff.example.json'], 1, 'Config bootstrapMode differs from selected mode.');

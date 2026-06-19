@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, extname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { basename, extname, join, relative, resolve } from 'node:path';
 
 const root = process.cwd();
 const ignoredDirs = new Set(['.git','node_modules','dist','build','coverage','.next']);
@@ -41,7 +42,13 @@ function walk(dir) {
 }
 
 function normalizePathForPolicy(filePath) {
-  return filePath.replaceAll('\\\\', '/');
+  return String(filePath ?? '').replaceAll('\\', '/');
+}
+
+function normalizedPolicyPaths(filePath) {
+  const raw = normalizePathForPolicy(filePath);
+  const rel = normalizePathForPolicy(relative(root, filePath));
+  return [raw, rel];
 }
 
 function stripInlineComment(value) {
@@ -149,8 +156,9 @@ export function isSensitiveCredentialFilename(filePath) {
 }
 
 export function isCredentialPath(filePath) {
-  const normalized = normalizePathForPolicy(filePath);
-  return credentialPathSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`/${suffix}`));
+  return normalizedPolicyPaths(filePath).some((normalized) =>
+    credentialPathSuffixes.some((suffix) => normalized === suffix || normalized.endsWith(`/${suffix}`))
+  );
 }
 
 export function isSecretBearingTextFilename(filePath) {
@@ -159,18 +167,33 @@ export function isSecretBearingTextFilename(filePath) {
 
 export function shouldScanSecretSafetyPath(path) {
   const rel = normalizePathForPolicy(relative(root, path));
-  if (rel.includes(`${'.git'}/`)) return false;
+  const raw = normalizePathForPolicy(path);
+  if (rel.includes(`${'.git'}/`) || raw.includes(`${'.git'}/`)) return false;
   if (isSensitiveCredentialFilename(path)) return true;
-  if (isCredentialPath(rel)) return true;
+  if (isCredentialPath(path)) return true;
   if (isSecretBearingTextFilename(path)) return true;
   if (basename(path) === '.env.example') return true;
   if (basename(path).startsWith('.env') && basename(path) !== '.env.example') return true;
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
 }
 
+export function isScannerInternalPatternLine(rel, line) {
+  const normalizedRel = normalizePathForPolicy(rel);
+  const text = String(line ?? '');
+  const assignment = extractAssignment(text);
+  if (assignment && isHardSecretValue(assignment.value)) return false;
+  if (normalizedRel === 'scripts/secret-safety-check.mjs') {
+    return /(?:const\s+\w*Pattern\s*=|Pattern\.test|credentialPathSuffixes|secretBearingTextBasenames|publicReasonCodes|publicSafeSummary|noSecretsRead)/.test(text);
+  }
+  if (/^scripts\/validate-.*\.mjs$/.test(normalizedRel)) {
+    return /mustContain|mustNotMatch|blockedSecretSamples|allowedSecretSamples|blockedEnvExampleSamples|credential-shaped string|forbidden|pattern\.test|public reason|publicReasonCodes|skipped credential path/.test(text)
+      || /^\s*\//.test(text);
+  }
+  return false;
+}
+
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
-  if (/scripts\/secret-safety-check\.mjs$/.test(rel) && /Pattern\s*=/.test(line)) return [];
-  if (/scripts\/validate-.*\.mjs$/.test(rel) && (/credential-shaped string|forbidden|pattern\.test/.test(line) || /^\s*\//.test(line))) return [];
+  if (isScannerInternalPatternLine(rel, line)) return [];
   const finding = [];
   const assignment = extractAssignment(line);
   const value = assignment?.value ?? line;
@@ -218,7 +241,9 @@ export function runSecretSafetyCheck() {
   };
 }
 
-const invoked = import.meta.url === `file://${process.argv[1]}`;
+const invoked = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 if (invoked) {
   const report = runSecretSafetyCheck();
   console.log(JSON.stringify(report, null, 2));

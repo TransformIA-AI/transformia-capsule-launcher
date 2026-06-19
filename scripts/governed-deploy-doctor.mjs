@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 const root = process.cwd();
 const managedPath = join(root, 'bootstrap', 'stack', 'managed.stack.manifest.json');
@@ -107,7 +108,9 @@ function printHuman(report) {
   console.log('No deploy, provider call, live execution, secret read or private runtime inclusion was performed.');
 }
 
-const invoked = import.meta.url === `file://${process.argv[1]}`;
+const invoked = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 if (invoked) {
   const args = parseArgs(process.argv.slice(2));
   const report = buildGovernedDeployDoctorReport({ mode: args.mode });
