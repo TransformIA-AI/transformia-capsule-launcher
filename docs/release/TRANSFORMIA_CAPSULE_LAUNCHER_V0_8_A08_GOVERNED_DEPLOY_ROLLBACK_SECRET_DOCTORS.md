@@ -51,3 +51,9 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 - Placeholder safety is now value-based rather than prose/comment-based.
 - Standard credential paths such as `.aws/credentials` are scanned line by line.
 - Rollback readiness requires non-empty rollback steps, expected evidence and operator next steps.
+
+## A08 source assignment and rollback schema hardening
+
+- JavaScript and TypeScript `const`, `let`, `var` and exported source declarations are scanned for sensitive assignments.
+- `rollbackAvailable` is schema-constrained to `true`.
+- `.aws/credentials` and standard credential paths remain covered by validator regressions and negative checks.

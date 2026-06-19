@@ -43,3 +43,7 @@ Provider-prefixed key names such as `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `DATA
 ## A08 policy refactor update
 
 Placeholder safety is value-based, not prose/comment-based: comments such as `example` or `must stay outside` do not make a non-placeholder sensitive assignment safe. Standard credential paths such as `.aws/credentials`, `.aws/config`, `.kube/config` and `.docker/config.json` are scanned line by line. The scanner remains static, conservative and inspection-only.
+
+## A08 source declaration scan update
+
+JavaScript and TypeScript source declarations such as `const`, `let`, `var` and `export const` are parsed for sensitive assignment keys. Placeholder-safe source declarations remain allowed, but non-placeholder provider-prefixed assignments are blocked. Standard credential paths such as `.aws/credentials` remain covered.

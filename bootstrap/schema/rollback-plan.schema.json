@@ -21,7 +21,7 @@
     "rollbackPlanRef": { "type": "string" },
     "stackRef": { "type": "string" },
     "rollbackMode": { "const": "operator_review_plan_only" },
-    "rollbackAvailable": { "type": "boolean" },
+    "rollbackAvailable": { "const": true },
     "rollbackStepsPublicSafe": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "requiredHumanApprovalBeforeRollback": { "const": true },
     "noRollbackPerformed": { "const": true },

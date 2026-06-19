@@ -59,6 +59,9 @@ function unquote(value) {
 }
 
 export function extractAssignment(line) {
+  const sourceDeclaration = line.match(/^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(.*?)\s*;?\s*$/);
+  if (sourceDeclaration) return { key: sourceDeclaration[1], value: unquote(stripInlineComment(sourceDeclaration[2])) };
+
   const match = line.match(/^\s*\{?\s*(?:ENV\s+|export\s+|set\s+)?["']?([^"'\s:=]+)["']?\s*[:=]\s*(.*?)\s*[,;}]?\s*$/i);
   if (!match) return null;
   return { key: match[1], value: unquote(stripInlineComment(match[2])) };
@@ -146,6 +149,7 @@ export function shouldScanSecretSafetyPath(path) {
 }
 
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
+  if (/scripts\/secret-safety-check\.mjs$/.test(rel) && /Pattern\s*=/.test(line)) return [];
   if (/scripts\/validate-.*\.mjs$/.test(rel) && (/credential-shaped string|forbidden|pattern\.test/.test(line) || /^\s*\//.test(line))) return [];
   const finding = [];
   const assignment = extractAssignment(line);

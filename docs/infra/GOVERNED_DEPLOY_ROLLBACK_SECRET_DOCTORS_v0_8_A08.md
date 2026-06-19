@@ -39,3 +39,7 @@ The A08 validator now fails if the checked-in rollback doctor report is not OK, 
 ## A08 rollback readiness evidence update
 
 Rollback readiness requires non-empty `rollbackStepsPublicSafe`, `evidenceExpected` and `operatorNextSteps` arrays in addition to the no-rollback/no-delete/no-provider/no-live/no-secret flags.
+
+## A08 rollback schema update
+
+The rollback plan schema now constrains `rollbackAvailable` to `true`, matching the rollback doctor readiness contract.

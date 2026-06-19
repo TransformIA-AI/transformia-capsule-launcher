@@ -33,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'extractAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'const|let|var', 'extractAssignment', 'normalizeAssignmentKey', 'isSensitiveAssignmentKey', 'isPlaceholderValue', 'isHardSecretValue', 'isSensitiveCredentialFilename', 'isCredentialPath', 'isSecretBearingTextFilename', 'shouldScanSecretSafetyPath', 'credentialPathSuffixes', '.aws/credentials', '.aws/config', '.kube/config', '.docker/config.json', 'secretBearingTextBasenames', '.npmrc', '.netrc', '.pypirc', 'kubeconfig', 'Dockerfile', 'Makefile', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\s+(run|compose|build)|dockerode|from ['\"]docker/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -51,6 +51,8 @@ for (const field of requiredRollbackFields) {
   if (!(field in rollbackExample)) fail(`rollback example missing required field: ${field}`);
 }
 if (rollbackExample.rollbackMode !== 'operator_review_plan_only') fail('rollback example must use operator_review_plan_only.');
+if (rollbackSchema.properties?.rollbackAvailable?.const !== true) fail('rollback schema must constrain rollbackAvailable to const true.');
+if (rollbackSchema.properties?.rollbackAvailable?.type === 'boolean' && !('const' in rollbackSchema.properties.rollbackAvailable)) fail('rollback schema must not allow rollbackAvailable as unconstrained boolean.');
 for (const flag of ['requiredHumanApprovalBeforeRollback','noRollbackPerformed','noDeletePerformed','noProviderCall','noLiveExecution','noSecretsIncluded']) if (rollbackExample[flag] !== true) fail(`rollback example flag must be true: ${flag}`);
 
 for (const mode of ['all','managed','self-host']) {
@@ -85,6 +87,12 @@ const blockedSecretSamples = [
   `{"${'password'}":"actual-secret"}`,
   `${'api' + '_key'}=actual-secret`,
   `${'OPENAI' + '_API_KEY'}=actual-secret`,
+  `${'const OPENAI' + '_API_KEY'} = "actual-secret";`,
+  `${'let STRIPE' + '_SECRET_KEY'} = "actual-secret";`,
+  `${'var DATABASE' + '_PASSWORD'} = "actual-secret";`,
+  `${'export const MY' + '_WEBHOOK_URL'} = "actual-secret";`,
+  `${'const client' + 'Secret'} = "actual-secret";`,
+  `${'const private' + 'Key'} = "actual-secret";`,
   `${'OPENAI' + '_API_KEY'}=actual-secret # example`,
   `${'OPENAI' + '_API_KEY'}=actual-secret # must stay outside`,
   `${'AWS' + '_ACCESS_KEY_ID'}=actual-secret`,
@@ -110,6 +118,7 @@ for (const key of ['OPENAI_API_KEY','STRIPE_SECRET_KEY','DATABASE_PASSWORD','MY_
   if (!isSensitiveAssignmentKey(key)) fail(`secret scanner regression missed sensitive assignment key: ${key}`);
 }
 if (extractAssignmentKey(`${'OPENAI' + '_API_KEY'}=actual-secret`) !== 'OPENAI_API_KEY') fail('secret scanner regression failed to extract provider-prefixed assignment key.');
+if (extractAssignmentKey(`${'const OPENAI' + '_API_KEY'} = "actual-secret";`) !== 'OPENAI_API_KEY') fail('secret scanner regression failed to extract source declaration assignment key.');
 const extractedAssignment = extractAssignment(`${'OPENAI' + '_API_KEY'}=actual-secret # example`);
 if (extractedAssignment?.key !== 'OPENAI_API_KEY' || extractedAssignment.value !== 'actual-secret') fail('secret scanner regression failed value-based assignment extraction.');
 if (normalizeAssignmentKey('STRIPE_SECRET_KEY') !== 'stripesecretkey') fail('secret scanner regression failed assignment key normalization.');
@@ -125,7 +134,10 @@ const allowedSecretSamples = [
   `${'STRIPE' + '_SECRET_KEY'}=<STRIPE_SECRET_KEY_PLACEHOLDER>`,
   `${'DATABASE' + '_PASSWORD'}=YOUR_DATABASE_PASSWORD`,
   `${'API' + '_KEY'}=`,
-  `{"${'DATABASE' + '_PASSWORD'}":"REPLACE_WITH_DATABASE_PASSWORD"}`
+  `{"${'DATABASE' + '_PASSWORD'}":"REPLACE_WITH_DATABASE_PASSWORD"}`,
+  `${'const OPENAI' + '_API_KEY'} = "REPLACE_WITH_OPENAI_API_KEY";`,
+  `${'export const STRIPE' + '_SECRET_KEY'} = "<STRIPE_SECRET_KEY_PLACEHOLDER>";`,
+  `${'const DATABASE' + '_PASSWORD'} = "YOUR_DATABASE_PASSWORD";`
 ];
 for (const sample of allowedSecretSamples) {
   if (inspectSecretSafetyLine(sample, '.env.example').length !== 0) fail('secret scanner regression blocked placeholder-safe sample.');
@@ -154,6 +166,8 @@ for (const path of ['.aws/credentials','.aws/config','.kube/config','.docker/con
   if (!isCredentialPath(path)) fail(`secret scanner regression missed credential path: ${path}`);
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped credential path: ${path}`);
 }
+if (inspectSecretSafetyLine(`${'AWS' + '_ACCESS_KEY_ID'}=actual-secret`, '.aws/credentials').length === 0) fail('secret scanner regression allowed AWS access key in .aws/credentials.');
+if (inspectSecretSafetyLine(`${'AWS' + '_SECRET_ACCESS_KEY'}=actual-secret`, '.aws/credentials').length === 0) fail('secret scanner regression allowed AWS secret key in .aws/credentials.');
 
 for (const path of ['script.sh','shell.bash','shell.zsh','tool.py','component.ts','component.tsx','view.jsx','index.html','style.css','style.scss','config.toml','settings.ini','service.conf','app.cfg','app.properties','data.xml','data.csv']) {
   if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped common text/source path: ${path}`);
