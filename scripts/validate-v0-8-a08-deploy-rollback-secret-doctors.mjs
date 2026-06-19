@@ -89,6 +89,29 @@ if (!isScannerInternalPatternLine('scripts/secret-safety-check.mjs', 'const toke
 if (!isScannerInternalPatternLine('scripts/validate-launch-docs.mjs', "mustContain('x', ['public reason strings']);")) fail('scanner internal helper rejected validator pattern line.');
 if (isScannerInternalPatternLine('src/A08_NEGATIVE.ts', 'const OPENAI_API_KEY = "actual-secret";')) fail('scanner internal helper allowed real source assignment.');
 
+const validatorAllowlistHardSecretSamples = [
+  {
+    line: `mustContain("fixture", ["${'ghp_' + '123456789012345678901234'}"])`,
+    reason: 'token_or_api_key_value'
+  },
+  {
+    line: `mustContain("fixture", ["${'-----BEGIN ' + 'PRIVATE KEY-----'}"])`,
+    reason: 'private_key_block'
+  },
+  {
+    line: `mustContain("fixture", ["${'https://' + 'example.com' + '/webhook/abc'}"])`,
+    reason: 'webhook_url'
+  },
+  {
+    line: `mustContain("fixture", ["${'customer email' + ": 'person@example.invalid'"}"])`,
+    reason: 'raw_customer_data_pattern'
+  }
+];
+for (const sample of validatorAllowlistHardSecretSamples) {
+  const findings = inspectSecretSafetyLine(sample.line, 'scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs');
+  if (!findings.includes(sample.reason)) fail(`validator allowlist suppressed hard secret finding: ${sample.reason}`);
+}
+
 const blockedSecretSamples = [
   `{"${'api' + 'Key'}":"actual-secret"}`,
   `{"${'client' + '_secret'}":"actual-secret"}`,

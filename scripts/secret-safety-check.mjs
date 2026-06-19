@@ -6,7 +6,7 @@ const root = process.cwd();
 const ignoredDirs = new Set(['.git','node_modules','dist','build','coverage','.next']);
 const scanExtensions = new Set(['.js','.mjs','.ts','.tsx','.jsx','.json','.md','.txt','.yml','.yaml','.example','.sh','.bash','.zsh','.env','.py','.html','.css','.scss','.toml','.ini','.conf','.cfg','.properties','.xml','.csv']);
 const tokenValuePattern = /\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/;
-const privateKeyPattern = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+const privateKeyPattern = new RegExp(`${'-----BEGIN '}[A-Z ]*${'PRIVATE KEY-----'}`);
 const webhookUrlPattern = /https?:\/\/[^\s"')]+webhook[^\s"')]+/i;
 const customerDataPattern = /\b(customer|tenant|client)\s*(email|phone|address|payload|record)\s*[:=]\s*["'][^"']+["']/i;
 const sensitiveCredentialBasenames = new Set(['id_rsa','id_dsa','id_ecdsa','id_ed25519']);
@@ -193,15 +193,19 @@ export function isScannerInternalPatternLine(rel, line) {
 }
 
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
-  if (isScannerInternalPatternLine(rel, line)) return [];
   const finding = [];
   const assignment = extractAssignment(line);
   const value = assignment?.value ?? line;
-  if (privateKeyPattern.test(value)) finding.push('private_key_block');
-  if (tokenValuePattern.test(value)) finding.push('token_or_api_key_value');
-  if (webhookUrlPattern.test(value)) finding.push('webhook_url');
-  if (assignment && isSensitiveAssignmentKey(assignment.key) && !isPlaceholderValue(assignment.value, rel) && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value)) finding.push('sensitive_key_name_outside_safe_context');
+
+  if (privateKeyPattern.test(value) || privateKeyPattern.test(line)) finding.push('private_key_block');
+  if (tokenValuePattern.test(value) || tokenValuePattern.test(line)) finding.push('token_or_api_key_value');
+  if (webhookUrlPattern.test(value) || webhookUrlPattern.test(line)) finding.push('webhook_url');
   if (customerDataPattern.test(line) && !(assignment && isPlaceholderValue(assignment.value, rel))) finding.push('raw_customer_data_pattern');
+
+  if (finding.length > 0) return [...new Set(finding)];
+  if (isScannerInternalPatternLine(rel, line)) return [];
+
+  if (assignment && isSensitiveAssignmentKey(assignment.key) && !isPlaceholderValue(assignment.value, rel) && !/^(true|false|null|undefined|0|1)$/i.test(assignment.value)) finding.push('sensitive_key_name_outside_safe_context');
   return [...new Set(finding)];
 }
 
