@@ -25,7 +25,7 @@ requireFiles(requiredA07, 'A07 dependency');
 requireFiles(requiredA08, 'A08 file');
 
 const packageJson = json('package.json');
-for (const scriptName of ['doctor:deploy','doctor:rollback','secrets:check','validate:v0-8-a08-deploy-rollback-secret-doctors','validate:v0-8-a07-stack-bootstrap']) {
+for (const scriptName of ['bootstrap:stack-plan:managed','bootstrap:stack-plan:self-host','doctor:deploy','doctor:deploy:managed','doctor:deploy:self-host','doctor:rollback','secrets:check','validate:v0-8-a08-deploy-rollback-secret-doctors','validate:v0-8-a07-stack-bootstrap']) {
   if (!packageJson.scripts?.[scriptName]) fail(`package.json missing script: ${scriptName}`);
 }
 if (!/validate:v0-8-a08-deploy-rollback-secret-doctors/.test(packageJson.scripts?.quality ?? '')) fail('quality script must include A08 validator.');
