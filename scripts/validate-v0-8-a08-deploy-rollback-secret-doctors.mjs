@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
+import { inspectSecretSafetyLine, runSecretSafetyCheck } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -32,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -60,6 +61,37 @@ for (const mode of ['all','managed','self-host']) {
 const rollbackReport = buildRollbackDoctorReport();
 if (rollbackReport.noRollbackPerformed !== true || rollbackReport.noDeletePerformed !== true || rollbackReport.noProviderCall !== true || rollbackReport.noLiveExecution !== true) fail('rollback doctor unsafe flags.');
 if (/rollback performed|rolled back successfully|delete performed/i.test(JSON.stringify(rollbackReport))) fail('rollback doctor output implies rollback/delete.');
+
+const secretScanReport = runSecretSafetyCheck();
+if (secretScanReport.ok !== true) {
+  for (const finding of secretScanReport.blockedFindings ?? []) {
+    const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
+    fail(`secret safety scan blocked ${location}: ${finding.reason}`);
+  }
+  if (!(secretScanReport.blockedFindings ?? []).length) fail('secret safety scan failed without public findings.');
+}
+
+const blockedSecretSamples = [
+  `{"${'api' + 'Key'}":"actual-secret"}`,
+  `{"${'client' + '_secret'}":"actual-secret"}`,
+  `{"${'password'}":"actual-secret"}`,
+  `${'api' + '_key'}=actual-secret`
+];
+for (const sample of blockedSecretSamples) {
+  if (!inspectSecretSafetyLine(sample, 'in-memory-regression.json').includes('sensitive_key_name_outside_safe_context')) fail('secret scanner regression missed blocked sensitive key sample.');
+}
+const allowedSecretSamples = [
+  `{"${'api' + 'Key'}":"REPLACE_WITH_API_KEY"}`,
+  `${'api' + '_key'}=REPLACE_WITH_API_KEY`
+];
+for (const sample of allowedSecretSamples) {
+  if (inspectSecretSafetyLine(sample, '.env.example').length !== 0) fail('secret scanner regression blocked placeholder-safe sample.');
+}
+
+const rollbackUnavailableReport = buildRollbackDoctorReport({ planOverride: { ...rollbackExample, rollbackAvailable: false } });
+if (rollbackUnavailableReport.ok !== false) fail('rollbackAvailable false must fail rollback readiness.');
+if (rollbackUnavailableReport.rollbackReadinessStatus === 'rollback_plan_ready_for_operator_review') fail('rollbackAvailable false must not be ready for operator review.');
+if (!rollbackUnavailableReport.publicReasonCodes.includes('blocked_rollback_unavailable')) fail('rollbackAvailable false must emit blocked_rollback_unavailable.');
 
 if (errors.length) {
   console.error('v0.8-A08 deploy/rollback/secret doctors validator failed.');

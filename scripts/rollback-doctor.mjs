@@ -9,32 +9,55 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-export function buildRollbackDoctorReport() {
+export function validateRollbackPlan(plan) {
   const blockers = [];
   const warnings = [];
   const publicReasonCodes = [];
-  let plan = null;
 
-  if (!existsSync(rollbackPlanPath)) {
-    blockers.push('Missing public-safe rollback plan example.');
-    publicReasonCodes.push('blocked_missing_rollback_plan');
-  } else {
-    plan = readJson(rollbackPlanPath);
-    for (const field of requiredFields) if (!(field in plan)) blockers.push(`Rollback plan missing required field: ${field}`);
-    if (plan.rollbackMode !== 'operator_review_plan_only') blockers.push('Rollback mode must be operator_review_plan_only.');
-    if (plan.requiredHumanApprovalBeforeRollback !== true) blockers.push('Rollback plan must require human approval.');
-    if (plan.noRollbackPerformed !== true || plan.noDeletePerformed !== true || plan.noProviderCall !== true || plan.noLiveExecution !== true || plan.noSecretsIncluded !== true) blockers.push('Rollback plan must assert no rollback, delete, provider call, live execution or secrets.');
-    if (!Array.isArray(plan.rollbackStepsPublicSafe) || plan.rollbackStepsPublicSafe.length === 0) warnings.push('Rollback plan should include public-safe operator review steps.');
+  for (const field of requiredFields) if (!(field in plan)) blockers.push(`Rollback plan missing required field: ${field}`);
+  if (plan.rollbackMode !== 'operator_review_plan_only') blockers.push('Rollback mode must be operator_review_plan_only.');
+  if (plan.rollbackAvailable !== true) {
+    blockers.push('Rollback plan must declare rollbackAvailable true.');
+    publicReasonCodes.push('blocked_rollback_unavailable');
+  }
+  if (plan.requiredHumanApprovalBeforeRollback !== true) blockers.push('Rollback plan must require human approval.');
+  if (plan.noRollbackPerformed !== true || plan.noDeletePerformed !== true || plan.noProviderCall !== true || plan.noLiveExecution !== true || plan.noSecretsIncluded !== true) blockers.push('Rollback plan must assert no rollback, delete, provider call, live execution or secrets.');
+  if (!Array.isArray(plan.rollbackStepsPublicSafe) || plan.rollbackStepsPublicSafe.length === 0) warnings.push('Rollback plan should include public-safe operator review steps.');
+
+  return { blockers, warnings, publicReasonCodes };
+}
+
+export function buildRollbackDoctorReport(options = {}) {
+  const blockers = [];
+  const warnings = [];
+  const publicReasonCodes = [];
+  let plan = options.planOverride ?? null;
+
+  if (!plan) {
+    if (!existsSync(rollbackPlanPath)) {
+      blockers.push('Missing public-safe rollback plan example.');
+      publicReasonCodes.push('blocked_missing_rollback_plan');
+    } else {
+      plan = readJson(rollbackPlanPath);
+    }
+  }
+
+  if (plan) {
+    const validation = validateRollbackPlan(plan);
+    blockers.push(...validation.blockers);
+    warnings.push(...validation.warnings);
+    publicReasonCodes.push(...validation.publicReasonCodes);
   }
 
   const ok = blockers.length === 0;
+  const blockedStatus = publicReasonCodes.includes('blocked_rollback_unavailable') ? 'blocked_rollback_unavailable' : 'blocked_rollback_plan_shape';
   return {
     sourceContract: 'launcher_v0_8_a08_rollback_doctor_report',
     ok,
-    rollbackReadinessStatus: ok ? 'rollback_plan_ready_for_operator_review' : 'blocked_rollback_plan_shape',
+    rollbackReadinessStatus: ok ? 'rollback_plan_ready_for_operator_review' : blockedStatus,
     blockers,
     warnings,
-    publicReasonCodes: publicReasonCodes.length ? publicReasonCodes : [ok ? 'rollback_plan_ready_for_operator_review' : 'blocked_rollback_plan_shape'],
+    publicReasonCodes: publicReasonCodes.length ? publicReasonCodes : [ok ? 'rollback_plan_ready_for_operator_review' : blockedStatus],
     publicSafeSummary: 'Rollback Doctor validates rollback plan shape only. It does not rollback, delete, mutate config, run shell commands, call providers or perform live execution.',
     noRollbackPerformed: true,
     noDeletePerformed: true,

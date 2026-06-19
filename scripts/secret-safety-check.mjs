@@ -5,7 +5,7 @@ const root = process.cwd();
 const ignoredDirs = new Set(['.git','node_modules','dist','build','coverage','.next']);
 const scanExtensions = new Set(['.js','.mjs','.json','.md','.txt','.yml','.yaml','.example']);
 const placeholderPattern = /(<[^>]+>|YOUR_[A-Z0-9_]+|REPLACE_WITH_[A-Z0-9_]+|example|placeholder|public-safe|boundary|no secrets|no secret|not include|must stay outside|does not ask|sin credenciales|no requiere)/i;
-const sensitiveKeyPattern = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|provider[_-]?payload|webhook[_-]?url|password|credential|secret)\b\s*[:=]/i;
+const sensitiveKeyPattern = /["']?\b(api[_-]?key|apiKey|access[_-]?token|accessToken|refresh[_-]?token|refreshToken|client[_-]?secret|clientSecret|private[_-]?key|privateKey|provider[_-]?payload|providerPayload|webhook[_-]?url|webhookUrl|password|credential|secret)\b["']?\s*[:=]/i;
 const tokenValuePattern = /\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/;
 const privateKeyPattern = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 const webhookUrlPattern = /https?:\/\/[^\s"')]+webhook[^\s"')]+/i;
@@ -34,6 +34,16 @@ function safeContext(line, rel) {
   return placeholderPattern.test(line) && !tokenValuePattern.test(line) && !privateKeyPattern.test(line) && !webhookUrlPattern.test(line);
 }
 
+export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
+  const finding = [];
+  if (privateKeyPattern.test(line) && !safeContext(line, rel)) finding.push('private_key_block');
+  if (tokenValuePattern.test(line) && !safeContext(line, rel)) finding.push('token_or_api_key_value');
+  if (webhookUrlPattern.test(line) && !safeContext(line, rel)) finding.push('webhook_url');
+  if (sensitiveKeyPattern.test(line) && !safeContext(line, rel)) finding.push('sensitive_key_name_outside_safe_context');
+  if (customerDataPattern.test(line) && !safeContext(line, rel)) finding.push('raw_customer_data_pattern');
+  return finding;
+}
+
 export function runSecretSafetyCheck() {
   const blockedFindings = [];
   const warnings = [];
@@ -47,13 +57,8 @@ export function runSecretSafetyCheck() {
     }
     const lines = readFileSync(file, 'utf8').split(/\r?\n/);
     lines.forEach((line, index) => {
-      const finding = [];
-      if (privateKeyPattern.test(line) && !safeContext(line, rel)) finding.push('private_key_block');
-      if (tokenValuePattern.test(line) && !safeContext(line, rel)) finding.push('token_or_api_key_value');
-      if (webhookUrlPattern.test(line) && !safeContext(line, rel)) finding.push('webhook_url');
-      if (sensitiveKeyPattern.test(line) && !safeContext(line, rel)) finding.push('sensitive_key_name_outside_safe_context');
-      if (customerDataPattern.test(line) && !safeContext(line, rel)) finding.push('raw_customer_data_pattern');
-      for (const reason of finding) blockedFindings.push({ file: rel, line: index + 1, reason });
+      const findings = inspectSecretSafetyLine(line, rel);
+      for (const reason of findings) blockedFindings.push({ file: rel, line: index + 1, reason });
     });
   }
 

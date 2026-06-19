@@ -22,3 +22,9 @@ A08 requires the A07 managed and self-host local stack bootstrap artifacts. The 
 A08 is no deploy, no rollback, no secret manager, no provider call, no live execution, no private runtime, no cloud provisioning, no DB, no auth and no telemetry. It does not start Docker, execute n8n, connect providers, mutate config, delete files or certify production readiness.
 
 Only a later approved PR may add real deployment, auth, secret manager integration or rollback execution.
+
+## A08 review hardening update
+
+- The A08 validator executes the real secret safety scan during quality.
+- Secret safety checks detect quoted JSON secret keys as well as YAML-style and equals-style key forms.
+- Rollback readiness requires `rollbackAvailable: true`; `false` blocks readiness.

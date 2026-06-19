@@ -27,3 +27,7 @@ A08 depends on the A07 bootstrap manifests, examples, schema, stack plan script 
 Launcher validates and explains. Runtime decides. Web renders. Dani approves. A08 does not deploy, rollback, start services, connect providers, execute n8n, read secret stores, include private runtime code or provision cloud infrastructure.
 
 Only a later approved PR may add real deployment, auth, secret manager integration or rollback execution.
+
+## A08 review hardening update
+
+Rollback readiness now requires `rollbackAvailable: true`. A rollback plan that declares rollback unavailable is blocked and cannot produce `rollback_plan_ready_for_operator_review`.

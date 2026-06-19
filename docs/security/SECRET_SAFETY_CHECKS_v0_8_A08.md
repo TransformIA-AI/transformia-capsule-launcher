@@ -23,3 +23,7 @@ Documented placeholders and `.env.example` remain allowed when they are clearly 
 Only a later approved PR may add real deployment, auth, secret manager integration or rollback execution.
 
 Required explicit A08 boundary wording: no deploy, no rollback, no secret manager, no provider call, no live execution, no private runtime, no cloud provisioning, no DB, no auth, no telemetry.
+
+## A08 review hardening update
+
+The A08 validator now executes the real secret safety scan as part of `npm run -s quality`, so quality fails if `runSecretSafetyCheck()` reports blocked findings. The scanner also covers quoted JSON secret keys, YAML-style keys and equals-style keys across camelCase, snake_case and kebab-case forms while preserving placeholder-safe examples.
