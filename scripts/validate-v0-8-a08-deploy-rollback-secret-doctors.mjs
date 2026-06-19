@@ -25,8 +25,18 @@ requireFiles(requiredA07, 'A07 dependency');
 requireFiles(requiredA08, 'A08 file');
 
 const packageJson = json('package.json');
-for (const scriptName of ['bootstrap:stack-plan:managed','bootstrap:stack-plan:self-host','doctor:deploy','doctor:deploy:managed','doctor:deploy:self-host','doctor:rollback','secrets:check','validate:v0-8-a08-deploy-rollback-secret-doctors','validate:v0-8-a07-stack-bootstrap']) {
-  if (!packageJson.scripts?.[scriptName]) fail(`package.json missing script: ${scriptName}`);
+const requiredPackageScripts = {
+  'doctor:deploy': 'node scripts/governed-deploy-doctor.mjs',
+  'doctor:deploy:managed': 'node scripts/governed-deploy-doctor.mjs --mode managed',
+  'doctor:deploy:self-host': 'node scripts/governed-deploy-doctor.mjs --mode self-host',
+  'doctor:rollback': 'node scripts/rollback-doctor.mjs',
+  'secrets:check': 'node scripts/secret-safety-check.mjs',
+  'validate:v0-8-a08-deploy-rollback-secret-doctors': 'node scripts/validate-v0-8-a08-deploy-rollback-secret-doctors.mjs'
+};
+for (const [scriptName, expectedCommand] of Object.entries(requiredPackageScripts)) {
+  const actualCommand = packageJson.scripts?.[scriptName];
+  if (!actualCommand) fail(`package.json missing script: ${scriptName}`);
+  else if (actualCommand !== expectedCommand) fail(`package.json script ${scriptName} must be exactly: ${expectedCommand}`);
 }
 if (!/validate:v0-8-a08-deploy-rollback-secret-doctors/.test(packageJson.scripts?.quality ?? '')) fail('quality script must include A08 validator.');
 if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? '')) fail('quality script must retain A07 validator.');
