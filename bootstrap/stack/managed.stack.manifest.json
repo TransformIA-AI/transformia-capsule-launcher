@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "atlasItem": "v0.8-A07",
+  "bootstrapMode": "managed_cloud_handoff",
+  "stackRef": "transformia-managed-cloud-handoff-plan",
+  "displayName": "Managed Cloud handoff bootstrap plan",
+  "publicSafe": true,
+  "sourceAvailableBoundary": true,
+  "privateCoreIncluded": false,
+  "noSecretsIncluded": true,
+  "noProviderCall": true,
+  "noLiveExecution": true,
+  "noN8nExecution": true,
+  "noWebhookServer": true,
+  "noDatabaseProvisioning": true,
+  "noBinaryInstaller": true,
+  "noDockerStart": true,
+  "noCloudDeploy": true,
+  "humanApprovalRequiredBeforeLive": true,
+  "components": [
+    { "componentRef": "capsule_launcher", "role": "Public validation and onboarding surface only." },
+    { "componentRef": "private_runtime_external", "role": "External private runtime boundary; not bundled or cloned by this repo." },
+    { "componentRef": "web_flagship_external", "role": "External rendered operator surface boundary." },
+    { "componentRef": "n8n_external_or_managed", "role": "Conceptual managed automation edge; no execution from launcher." },
+    { "componentRef": "evidence_store_external_or_managed", "role": "Conceptual managed evidence boundary outside this repo." },
+    { "componentRef": "model_gateway_external_or_managed", "role": "Conceptual model gateway boundary outside this repo." },
+    { "componentRef": "secret_store_external", "role": "Operator or managed platform controlled vault boundary outside Git." },
+    { "componentRef": "connector_kits_preview", "role": "Public-safe metadata previews only." }
+  ],
+  "requiredLocalCapabilities": [
+    "Git checkout of this public source-available launcher.",
+    "Node.js runtime for validation commands.",
+    "Human review of readiness before any future managed activation."
+  ],
+  "excludedCapabilities": [
+    "No private runtime source is included.",
+    "No customer credentials are collected or stored in this repo.",
+    "No provider calls, webhook server, database provisioning or cloud deployment are performed.",
+    "No binary installer or Docker service start is provided."
+  ],
+  "operatorNextSteps": [
+    "Run the A07 validator from the public launcher.",
+    "Review managed handoff boundaries with Dani before live activation.",
+    "Keep customer credentials and provider setup outside this public repo.",
+    "Use a later approved managed path for any real activation."
+  ],
+  "validationCommands": [
+    "npm run -s validate:v0-8-a07-stack-bootstrap",
+    "npm run -s bootstrap:stack-plan -- --mode managed"
+  ],
+  "publicSafeSummary": "Managed mode validates the future TransformIA Cloud handoff shape only. It does not deploy, start services, include the private core or collect credentials. Human approval is required before live activation."
+}

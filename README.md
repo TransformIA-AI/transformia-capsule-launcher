@@ -87,6 +87,18 @@ npm run -s doctor
 
 Real provider connections happen through Capsule Cloud, not this public launcher. The launcher explains kit and recipe readiness, validates manifests and recipes, and keeps provider credentials outside the repo. Google Calendar recipes are public-safe installability descriptions, not proof of provider connection or event creation.
 
+
+## v0.8-A07 Stack bootstrap planning
+
+The v0.8-A07 stack bootstrap layer describes managed and self-host modes as plan-only readiness guidance. It does not request credentials, call providers, include private runtime code, start services, ship a binary installer or deploy infrastructure. Human approval is required before any future live activation.
+
+```bash
+npm run -s bootstrap:stack-plan
+npm run -s validate:v0-8-a07-stack-bootstrap
+```
+
+Use `npm run -s bootstrap:stack-plan -- --mode managed` for the managed Cloud handoff plan and `npm run -s bootstrap:stack-plan -- --mode self-host` for the self-host local stack plan.
+
 ## Local/BYOK config scaffold
 
 The local/BYOK config scaffold is documented in [`config/README.md`](config/README.md) and [`docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md`](docs/LOCAL_BYOK_CONFIG_SCAFFOLD.md). It is placeholder-only and non-executable.
