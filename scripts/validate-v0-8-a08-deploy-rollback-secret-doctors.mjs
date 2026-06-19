@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGovernedDeployDoctorReport } from './governed-deploy-doctor.mjs';
 import { buildRollbackDoctorReport } from './rollback-doctor.mjs';
-import { inspectSecretSafetyLine, runSecretSafetyCheck } from './secret-safety-check.mjs';
+import { inspectSecretSafetyLine, isSensitiveCredentialFilename, runSecretSafetyCheck, shouldScanSecretSafetyPath } from './secret-safety-check.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -33,7 +33,7 @@ if (!/validate:v0-8-a07-stack-bootstrap/.test(packageJson.scripts?.quality ?? ''
 
 mustNotMatch('scripts/governed-deploy-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /stripe/i, /postgres|mysql|mongodb/i, /provider sdk/i], 'deploy execution path');
 mustNotMatch('scripts/rollback-doctor.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /rmSync\s*\(/, /unlinkSync\s*\(/, /writeFileSync\s*\(/, /renameSync\s*\(/, /docker\b/i, /provider sdk/i], 'rollback mutation path');
-mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead']);
+mustContain('scripts/secret-safety-check.mjs', ['runSecretSafetyCheck', 'inspectSecretSafetyLine', 'isSensitiveCredentialFilename', 'shouldScanSecretSafetyPath', 'sensitive_credential_file_not_allowed', 'real_env_file_not_allowed', 'private_key_block', 'webhook_url', 'noSecretsRead', 'if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;']);
 mustNotMatch('scripts/secret-safety-check.mjs', [/child_process/, /fetch\s*\(/, /https?:\/\//, /docker\b/i, /n8n/i, /postgres|mysql|mongodb/i], 'secret checker live path');
 
 for (const doc of ['docs/infra/GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS_v0_8_A08.md','docs/security/SECRET_SAFETY_CHECKS_v0_8_A08.md','docs/release/TRANSFORMIA_CAPSULE_LAUNCHER_V0_8_A08_GOVERNED_DEPLOY_ROLLBACK_SECRET_DOCTORS.md']) {
@@ -59,6 +59,14 @@ for (const mode of ['all','managed','self-host']) {
   if (/deploy performed|deployed successfully|deployment complete/i.test(JSON.stringify(report))) fail(`deploy doctor output implies deployment for mode ${mode}`);
 }
 const rollbackReport = buildRollbackDoctorReport();
+if (rollbackReport.ok !== true) {
+  for (const blocker of rollbackReport.blockers ?? []) fail(`checked-in rollback report blocked: ${blocker}`);
+  if (!(rollbackReport.blockers ?? []).length) fail('checked-in rollback report is not ok.');
+}
+if (rollbackReport.rollbackReadinessStatus !== 'rollback_plan_ready_for_operator_review') fail(`checked-in rollback report has unexpected status: ${rollbackReport.rollbackReadinessStatus}`);
+if ((rollbackReport.blockers ?? []).length > 0) {
+  for (const blocker of rollbackReport.blockers) fail(`checked-in rollback blocker: ${blocker}`);
+}
 if (rollbackReport.noRollbackPerformed !== true || rollbackReport.noDeletePerformed !== true || rollbackReport.noProviderCall !== true || rollbackReport.noLiveExecution !== true) fail('rollback doctor unsafe flags.');
 if (/rollback performed|rolled back successfully|delete performed/i.test(JSON.stringify(rollbackReport))) fail('rollback doctor output implies rollback/delete.');
 
@@ -82,10 +90,26 @@ for (const sample of blockedSecretSamples) {
 }
 const allowedSecretSamples = [
   `{"${'api' + 'Key'}":"REPLACE_WITH_API_KEY"}`,
-  `${'api' + '_key'}=REPLACE_WITH_API_KEY`
+  `${'api' + '_key'}=REPLACE_WITH_API_KEY`,
+  `${'WEBHOOK' + '_URL'}=REPLACE_WITH_WEBHOOK_URL`,
+  `${'API' + '_KEY'}=<API_KEY_PLACEHOLDER>`
 ];
 for (const sample of allowedSecretSamples) {
   if (inspectSecretSafetyLine(sample, '.env.example').length !== 0) fail('secret scanner regression blocked placeholder-safe sample.');
+}
+
+const blockedEnvExampleSamples = [
+  `${'OPENAI' + '_API_KEY'}=${'sk-' + '1234567890abcdef'} # example`,
+  `${'WEBHOOK' + '_URL'}=${'https://' + 'example.com' + '/webhook/abc'}`,
+  `${'PRIVATE' + '_KEY'}=${'-----BEGIN ' + 'PRIVATE KEY-----'}`
+];
+for (const sample of blockedEnvExampleSamples) {
+  if (inspectSecretSafetyLine(sample, '.env.example').length === 0) fail('secret scanner regression allowed real token/private-key/webhook pattern in .env.example.');
+}
+
+for (const path of ['id_rsa','id_dsa','id_ecdsa','id_ed25519','private.pem','client.key','bundle.p12','bundle.pfx','server.cer','server.crt','request.csr']) {
+  if (!isSensitiveCredentialFilename(path)) fail(`secret scanner regression missed sensitive credential filename: ${path}`);
+  if (!shouldScanSecretSafetyPath(path)) fail(`secret scanner regression skipped sensitive credential path: ${path}`);
 }
 
 const rollbackUnavailableReport = buildRollbackDoctorReport({ planOverride: { ...rollbackExample, rollbackAvailable: false } });

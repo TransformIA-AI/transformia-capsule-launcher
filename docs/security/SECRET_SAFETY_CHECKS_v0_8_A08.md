@@ -27,3 +27,7 @@ Required explicit A08 boundary wording: no deploy, no rollback, no secret manage
 ## A08 review hardening update
 
 The A08 validator now executes the real secret safety scan as part of `npm run -s quality`, so quality fails if `runSecretSafetyCheck()` reports blocked findings. The scanner also covers quoted JSON secret keys, YAML-style keys and equals-style keys across camelCase, snake_case and kebab-case forms while preserving placeholder-safe examples.
+
+## A08 file-scan hardening update
+
+Key and certificate file names such as `id_rsa`, `.pem`, `.key`, `.p12`, `.pfx`, `.cer`, `.crt` and `.csr` are treated as blocked credential-bearing files. `.env.example` placeholders remain allowed, but token-like values, private-key blocks and webhook URLs are blocked even when the line contains placeholder or example wording.

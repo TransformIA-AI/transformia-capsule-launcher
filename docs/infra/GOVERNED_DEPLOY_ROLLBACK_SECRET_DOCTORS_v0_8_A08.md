@@ -31,3 +31,7 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 ## A08 review hardening update
 
 Rollback readiness now requires `rollbackAvailable: true`. A rollback plan that declares rollback unavailable is blocked and cannot produce `rollback_plan_ready_for_operator_review`.
+
+## A08 validator hardening update
+
+The A08 validator now fails if the checked-in rollback doctor report is not OK, has blockers or does not report `rollback_plan_ready_for_operator_review` for the public rollback example.

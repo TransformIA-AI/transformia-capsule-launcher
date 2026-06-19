@@ -28,3 +28,9 @@ Only a later approved PR may add real deployment, auth, secret manager integrati
 - The A08 validator executes the real secret safety scan during quality.
 - Secret safety checks detect quoted JSON secret keys as well as YAML-style and equals-style key forms.
 - Rollback readiness requires `rollbackAvailable: true`; `false` blocks readiness.
+
+## A08 file-scan and rollback validator hardening
+
+- Key and certificate files are blocked as credential-bearing files.
+- `.env.example` placeholder lines remain allowed, but real token-like values, private-key blocks and webhook URLs are blocked.
+- The A08 validator fails if the checked-in rollback doctor report is not OK or contains blockers.

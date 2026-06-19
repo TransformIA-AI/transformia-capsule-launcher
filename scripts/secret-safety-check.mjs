@@ -10,6 +10,8 @@ const tokenValuePattern = /\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}
 const privateKeyPattern = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 const webhookUrlPattern = /https?:\/\/[^\s"')]+webhook[^\s"')]+/i;
 const customerDataPattern = /\b(customer|tenant|client)\s*(email|phone|address|payload|record)\s*[:=]\s*["'][^"']+["']/i;
+const sensitiveCredentialBasenames = new Set(['id_rsa','id_dsa','id_ecdsa','id_ed25519']);
+const sensitiveCredentialExtensions = new Set(['.pem','.key','.p12','.pfx','.cer','.crt','.csr']);
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
@@ -20,21 +22,28 @@ function walk(dir) {
   });
 }
 
-function shouldScan(path) {
+export function isSensitiveCredentialFilename(filePath) {
+  const name = basename(filePath);
+  return sensitiveCredentialBasenames.has(name) || sensitiveCredentialExtensions.has(extname(name).toLowerCase());
+}
+
+export function shouldScanSecretSafetyPath(path) {
   const rel = relative(root, path);
   if (rel.includes(`${'.git'}/`)) return false;
+  if (isSensitiveCredentialFilename(path)) return true;
   if (basename(path) === '.env.example') return true;
   if (basename(path).startsWith('.env') && basename(path) !== '.env.example') return true;
   return scanExtensions.has(extname(path)) || path.endsWith('.example.json');
 }
 
 function safeContext(line, rel) {
-  if (/scripts\/validate-.*\.mjs$/.test(rel) && /credential-shaped string|forbidden|pattern\.test/.test(line)) return true;
+  if (tokenValuePattern.test(line) || privateKeyPattern.test(line) || webhookUrlPattern.test(line)) return false;
   if (rel.endsWith('.env.example')) return placeholderPattern.test(line);
-  return placeholderPattern.test(line) && !tokenValuePattern.test(line) && !privateKeyPattern.test(line) && !webhookUrlPattern.test(line);
+  return placeholderPattern.test(line);
 }
 
 export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
+  if (/scripts\/validate-.*\.mjs$/.test(rel) && /credential-shaped string|forbidden|pattern\.test/.test(line)) return [];
   const finding = [];
   if (privateKeyPattern.test(line) && !safeContext(line, rel)) finding.push('private_key_block');
   if (tokenValuePattern.test(line) && !safeContext(line, rel)) finding.push('token_or_api_key_value');
@@ -47,10 +56,14 @@ export function inspectSecretSafetyLine(line, rel = 'in-memory-check.json') {
 export function runSecretSafetyCheck() {
   const blockedFindings = [];
   const warnings = [];
-  const files = walk(root).filter(shouldScan).sort();
+  const files = walk(root).filter(shouldScanSecretSafetyPath).sort();
 
   for (const file of files) {
     const rel = relative(root, file);
+    if (isSensitiveCredentialFilename(file)) {
+      blockedFindings.push({ file: rel, reason: 'sensitive_credential_file_not_allowed' });
+      continue;
+    }
     if (basename(file).startsWith('.env') && basename(file) !== '.env.example') {
       blockedFindings.push({ file: rel, reason: 'real_env_file_not_allowed' });
       continue;
