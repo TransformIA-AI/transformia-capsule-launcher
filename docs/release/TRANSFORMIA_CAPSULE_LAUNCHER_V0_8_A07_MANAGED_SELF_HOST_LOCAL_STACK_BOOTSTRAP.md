@@ -53,6 +53,10 @@ No Cloud infrastructure is deployed. Managed mode remains a handoff plan.
 
 The launcher does not start Docker, n8n, Supabase, databases, webhook servers, provider jobs or model gateways.
 
+## Mode selection guardrails
+
+The planner defaults to self-host only when neither `--mode` nor config mode is provided. A valid config `bootstrapMode` selects the managed or self-host manifest when `--mode` is absent. If `--mode` and config disagree, the planner exits non-zero. Unknown `--mode` values also exit non-zero.
+
 ## Operator next steps
 
 Run the validator and planner commands, review boundaries, keep credentials outside Git and request Dani approval before future live activation.

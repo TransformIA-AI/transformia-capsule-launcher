@@ -55,6 +55,10 @@ A07 does not deploy Cloud infrastructure. Managed mode is a readiness and handof
 
 A07 does not start Docker, n8n, Supabase, provider jobs, webhook servers, databases or model gateways. Those are external prerequisites for a later approved live path.
 
+## Mode selection guardrails
+
+When no `--mode` and no config are supplied, the planner defaults to the self-host local plan. When `--config` is supplied without `--mode`, the planner derives the selected mode from a valid `config.bootstrapMode`. When both `--mode` and `--config` are supplied, a mismatch between the requested mode and `config.bootstrapMode` is blocked. Unknown `--mode` values are blocked instead of falling back.
+
 ## Operator next steps
 
 1. Run `npm run -s validate:v0-8-a07-stack-bootstrap`.

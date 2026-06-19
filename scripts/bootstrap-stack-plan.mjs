@@ -6,11 +6,14 @@ const args = process.argv.slice(2);
 const modeArg = readFlag('--mode');
 const configPath = readFlag('--config');
 const jsonOutput = args.includes('--json');
-const mode = modeArg === 'self-host' ? 'self_host_local_plan' : modeArg === 'managed' ? 'managed_cloud_handoff' : 'self_host_local_plan';
-const manifestPath = join(root, 'bootstrap', 'stack', mode === 'managed_cloud_handoff' ? 'managed.stack.manifest.json' : 'self-host.stack.manifest.json');
-const requiredTrue = ['publicSafe','sourceAvailableBoundary','noSecretsIncluded','noProviderCall','noLiveExecution','noN8nExecution','noWebhookServer','noDatabaseProvisioning','noBinaryInstaller','noDockerStart','noCloudDeploy','humanApprovalRequiredBeforeLive'];
+const cliModeMap = new Map([
+  ['managed', 'managed_cloud_handoff'],
+  ['self-host', 'self_host_local_plan']
+]);
+const validBootstrapModes = new Set(['managed_cloud_handoff', 'self_host_local_plan']);
 const blockers = [];
 const warnings = [];
+const requiredTrue = ['publicSafe','sourceAvailableBoundary','noSecretsIncluded','noProviderCall','noLiveExecution','noN8nExecution','noWebhookServer','noDatabaseProvisioning','noBinaryInstaller','noDockerStart','noCloudDeploy','humanApprovalRequiredBeforeLive'];
 
 function readFlag(flag) {
   const index = args.indexOf(flag);
@@ -26,10 +29,40 @@ function readJson(path, label) {
   }
 }
 
-function validateManifest(manifest) {
-  if (!manifest) return;
+function loadConfig(path) {
+  if (!path) return null;
+  const resolved = resolve(root, path);
+  if (!existsSync(resolved)) {
+    blockers.push('Provided config path does not exist.');
+    return null;
+  }
+  return readJson(resolved, 'Config');
+}
+
+function resolveSelectedMode(config) {
+  if (modeArg !== null) {
+    if (!cliModeMap.has(modeArg)) {
+      blockers.push('Unknown bootstrap mode.');
+      return null;
+    }
+    return cliModeMap.get(modeArg);
+  }
+
+  if (config?.bootstrapMode) {
+    if (!validBootstrapModes.has(config.bootstrapMode)) {
+      blockers.push('Config bootstrapMode is unknown.');
+      return null;
+    }
+    return config.bootstrapMode;
+  }
+
+  return 'self_host_local_plan';
+}
+
+function validateManifest(manifest, selectedMode) {
+  if (!manifest || !selectedMode) return;
   if (manifest.atlasItem !== 'v0.8-A07') blockers.push('Manifest atlasItem must be v0.8-A07.');
-  if (manifest.bootstrapMode !== mode) blockers.push('Manifest mode does not match requested mode.');
+  if (manifest.bootstrapMode !== selectedMode) blockers.push('Manifest mode does not match selected mode.');
   if (manifest.privateCoreIncluded !== false) blockers.push('Manifest must state privateCoreIncluded false.');
   for (const flag of requiredTrue) {
     if (manifest[flag] !== true) blockers.push(`Manifest must set ${flag} true.`);
@@ -40,33 +73,33 @@ function validateManifest(manifest) {
   if (typeof manifest.publicSafeSummary !== 'string' || manifest.publicSafeSummary.length < 40) blockers.push('Manifest needs a publicSafeSummary.');
 }
 
-function validateConfig(path) {
-  const resolved = resolve(root, path);
-  if (!existsSync(resolved)) {
-    blockers.push('Provided config path does not exist.');
-    return null;
-  }
-  const config = readJson(resolved, 'Config');
-  if (!config) return null;
+function validateConfig(config, selectedMode) {
+  if (!config) return;
   if (config.atlasItem !== 'v0.8-A07') blockers.push('Config atlasItem must be v0.8-A07.');
-  if (config.bootstrapMode && config.bootstrapMode !== mode) warnings.push('Config mode differs from requested mode; using requested manifest mode.');
+  if (config.bootstrapMode && !validBootstrapModes.has(config.bootstrapMode)) blockers.push('Config bootstrapMode is unknown.');
+  if (config.bootstrapMode && selectedMode && config.bootstrapMode !== selectedMode) blockers.push('Config bootstrapMode differs from selected mode.');
   if (config.planOnly !== true || config.publicSafe !== true) blockers.push('Config must be public-safe and plan-only.');
   if (config.privateCoreIncluded !== false) blockers.push('Config must keep privateCoreIncluded false.');
   for (const flag of ['noSecretsIncluded','noProviderCall','noLiveExecution']) {
     if (config[flag] !== true) blockers.push(`Config must set ${flag} true.`);
   }
-  return config;
 }
 
-if (!existsSync(manifestPath)) blockers.push('Requested stack manifest is missing.');
-const manifest = existsSync(manifestPath) ? readJson(manifestPath, 'Stack manifest') : null;
-validateManifest(manifest);
-if (configPath) validateConfig(configPath);
+const config = loadConfig(configPath);
+const selectedMode = resolveSelectedMode(config);
+const manifestPath = selectedMode
+  ? join(root, 'bootstrap', 'stack', selectedMode === 'managed_cloud_handoff' ? 'managed.stack.manifest.json' : 'self-host.stack.manifest.json')
+  : null;
+
+if (selectedMode && !existsSync(manifestPath)) blockers.push('Requested stack manifest is missing.');
+const manifest = selectedMode && existsSync(manifestPath) ? readJson(manifestPath, 'Stack manifest') : null;
+validateConfig(config, selectedMode);
+validateManifest(manifest, selectedMode);
 
 const plan = {
   sourceContract: 'launcher_v0_8_a07_stack_bootstrap_plan',
   ok: blockers.length === 0,
-  bootstrapMode: manifest?.bootstrapMode ?? mode,
+  bootstrapMode: manifest?.bootstrapMode ?? selectedMode,
   stackRef: manifest?.stackRef ?? null,
   blockers,
   warnings,
@@ -90,7 +123,7 @@ if (jsonOutput) {
   console.log(JSON.stringify(plan, null, 2));
 } else {
   console.log(`TransformIA Capsule Launcher A07 stack bootstrap plan`);
-  console.log(`Mode: ${plan.bootstrapMode}`);
+  console.log(`Mode: ${plan.bootstrapMode ?? 'unavailable'}`);
   console.log(`Stack ref: ${plan.stackRef ?? 'unavailable'}`);
   console.log(`Status: ${plan.ok ? 'OK' : 'BLOCKED'}`);
   console.log('');
