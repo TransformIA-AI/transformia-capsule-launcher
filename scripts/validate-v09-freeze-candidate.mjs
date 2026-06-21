@@ -6,6 +6,11 @@ for (const f of ['scripts/validate-v09-saas-activation-pack-handoff.mjs','docs/v
 const pkg = JSON.parse(read('package.json'));
 for (const s of ['validate:v09-saas-activation-pack-handoff','validate:v09-freeze-candidate']) if (!pkg.scripts?.[s]) fail(`package script missing: ${s}`);
 const l01 = spawnSync('node', ['scripts/validate-v09-saas-activation-pack-handoff.mjs'], { cwd: root, encoding: 'utf8' }); if (l01.status !== 0) fail(`L01 validator does not pass conceptually: ${l01.stderr || l01.stdout}`);
+
+const domain = exists('src/activation/saas-activation-pack-handoff.ts') ? read('src/activation/saas-activation-pack-handoff.ts') : '';
+if (!domain.includes("pack.validationReport.ok === true ? 'freeze_candidate_ready' : 'freeze_blocked'")) fail('freeze candidate builder must block validationReport.ok false packs.');
+if (!domain.includes("pack.validationReport = validateSaaSActivationPack(pack); pack.publicSafeSummary = toPublicSaaSActivationPackSummary(pack); pack.fingerprint = computeActivationPackFingerprint(pack)")) fail('activation pack summary must be based on final validation report.');
+if (!domain.includes("pack.byokReadinessDraft.readinessStatus.startsWith('blocked_')")) fail('blocked BYOK readiness must fail pack validation.');
 const all = ['src/activation/saas-activation-pack-handoff.ts','src/activation/saas-activation-pack-writer.ts','docs/v0.9/V0_9_FREEZE_CANDIDATE.md','docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md'].filter(exists).map(read).join('\n');
 for (const p of [/fetch\s*\(/i,/axios/i,/stripe/i,/auth0|supabase|firebase/i,/postgres|mysql|mongodb/i,/process\.env/i]) if (p.test(all)) fail(`freeze candidate forbidden surface: ${p}`);
 const doc = exists('docs/v0.9/V0_9_FREEZE_CANDIDATE.md') ? read('docs/v0.9/V0_9_FREEZE_CANDIDATE.md') : '';

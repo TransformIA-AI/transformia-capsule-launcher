@@ -14,6 +14,13 @@ for (const h of helpers) if (!domain.includes(`export function ${h}`)) fail(`mis
 for (const s of statuses) if (!domain.includes(s)) fail(`missing status: ${s}`);
 for (const r of quarantined) if (!domain.includes(r)) fail(`missing blocked route: ${r}`);
 for (const name of ['toPublicSaaSActivationPackSummary','buildV09FreezeCandidateSummary','computeStableChecksum','computeActivationPackFingerprint']) if (!domain.includes(name)) fail(`missing required helper reference: ${name}`);
+if (!domain.includes("pack.byokReadinessDraft.readinessStatus.startsWith('blocked_')") || !domain.includes('blockers.push(pack.byokReadinessDraft.readinessStatus)')) fail('blocked BYOK readiness must create a validation blocker.');
+if (!domain.includes("pack.validationReport.ok === true ? 'freeze_candidate_ready' : 'freeze_blocked'")) fail('freeze candidate summary must use validationReport.ok, not blocker count alone.');
+if (!domain.includes("pack.validationReport = validateSaaSActivationPack(pack); pack.publicSafeSummary = toPublicSaaSActivationPackSummary(pack); pack.fingerprint = computeActivationPackFingerprint(pack)")) fail('buildSaaSActivationPack must compute summary after final validation and fingerprint last.');
+const caseZeroNoteMatch = domain.match(/buildCaseZeroActivationIntentFixture[\s\S]*?notesPublicSafe: '([^']+)'/);
+if (!caseZeroNoteMatch) fail('Case Zero fixture note missing.');
+else if (/credential|secret|token|key|password|provider/i.test(caseZeroNoteMatch[1])) fail('Case Zero fixture note contains sensitive vocabulary.');
+
 if (!writer.includes('relative(root, target)') || !writer.includes('blocked_path_traversal') || !writer.includes('buildActivationPackFileManifest')) fail('writer must normalize path, block traversal and use allowed manifest.');
 const packageJson = JSON.parse(read('package.json'));
 if (packageJson.scripts?.['validate:v09-saas-activation-pack-handoff'] !== 'node scripts/validate-v09-saas-activation-pack-handoff.mjs') fail('package script missing for L01 validator.');

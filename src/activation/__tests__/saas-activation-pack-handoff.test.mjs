@@ -19,3 +19,21 @@ test('writer has explicit traversal guard and allowed filenames', () => {
 test('activation module has no provider/network/auth/payment imports', () => {
   assert.doesNotMatch(domain + writer, /fetch\s*\(|axios|stripe|supabase|firebase|auth0|postgres|mysql|mongodb|hubspot|salesforce|analytics|crm/i);
 });
+
+test('P2-1 BYOK blocked readiness is a validation blocker and freezes blocked', () => {
+  assert.match(domain, /readinessStatus\.startsWith\('blocked_'\)/);
+  assert.match(domain, /blockers\.push\(pack\.byokReadinessDraft\.readinessStatus\)/);
+  assert.match(domain, /blocked_plan_not_allowed/);
+  assert.match(domain, /pack\.validationReport\.ok === true \? 'freeze_candidate_ready' : 'freeze_blocked'/);
+});
+test('P2-2 Case Zero fixture avoids sensitive public notes', () => {
+  const fixtureLine = domain.match(/buildCaseZeroActivationIntentFixture[\s\S]*?notesPublicSafe: '([^']+)'/);
+  assert.ok(fixtureLine);
+  assert.doesNotMatch(fixtureLine[1], /credential|secret|token|key|password|provider/i);
+  assert.match(fixtureLine[1], /Setup references are reviewed by TransformIA before any external connection\./);
+});
+test('P2-3 summary is computed after final validation and participates in fingerprint', () => {
+  assert.match(domain, /pack\.validationReport = validateSaaSActivationPack\(pack\); pack\.publicSafeSummary = toPublicSaaSActivationPackSummary\(pack\); pack\.fingerprint = computeActivationPackFingerprint\(pack\)/);
+  assert.match(domain, /status: pack\.validationReport\.status/);
+  assert.match(domain, /const \{ fingerprint, validationReport, \.\.\.rest \} = pack/);
+});
