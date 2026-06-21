@@ -21,7 +21,7 @@ if (writer.includes('publicJson(pack.') || writer.includes('buildActivationPackW
 if (!domain.includes("pack.byokReadinessDraft.readinessStatus.startsWith('blocked_')") || !domain.includes('blockers.push(pack.byokReadinessDraft.readinessStatus)')) fail('blocked BYOK readiness must create a validation blocker.');
 if (!domain.includes("pack.validationReport.ok === true ? 'freeze_candidate_ready' : 'freeze_blocked'")) fail('freeze candidate summary must use validationReport.ok.');
 if (domain.includes('new RegExp(')) fail('sensitive matcher must not use fragile string-built RegExp.');
-if (!domain.includes('containsSensitivePublicInput','finalizeSaaSActivationPackForWrite')) fail('containsSensitivePublicInput executable helper is required.');
+if (!domain.includes('containsSensitivePublicInput') || !domain.includes('finalizeSaaSActivationPackForWrite')) fail('containsSensitivePublicInput and finalizeSaaSActivationPackForWrite executable helpers are required.');
 if (!test.includes('123456789') || !test.includes('123-456-789') || !test.includes('123 456 789') || !test.includes('00000000A')) fail('numeric PII executable tests are required.');
 if (!test.includes('mutated.intent.notesPublicSafe') || !test.includes('mutated.organizationWorkspaceDraft.organizationDraftId')) fail('tests must mutate a previously valid pack before writing.');
 for (const requiredMutation of ['workspaceDraftId', 'organizationDisplayName', 'workspaceDisplayName', 'commissioningChecklist[0].evidenceRef', 'providerKinds']) if (!test.includes(requiredMutation)) fail(`missing mutated serialized draft test: ${requiredMutation}`);
