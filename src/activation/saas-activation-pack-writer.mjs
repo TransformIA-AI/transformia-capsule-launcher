@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join, relative, sep } from 'node:path';
-import { buildActivationPackFileManifest, buildV09FreezeCandidateSummary } from './saas-activation-pack-handoff.mjs';
+import { buildActivationPackFileManifest, buildV09FreezeCandidateSummary, validateSaaSActivationPack } from './saas-activation-pack-handoff.mjs';
 
 export class ActivationPackWriteBlockedError extends Error {
   constructor(blockers = []) {
@@ -15,8 +15,9 @@ function assertInside(root, target) {
   if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`) || resolve(target) !== target) throw new Error('blocked_path_traversal');
 }
 function assertWritablePack(pack) {
-  const blockers = pack?.validationReport?.blockers ?? ['validation_report_missing'];
-  if (pack?.validationReport?.ok !== true) throw new ActivationPackWriteBlockedError(blockers);
+  const currentReport = pack ? validateSaaSActivationPack(pack) : { ok: false, blockers: ['activation_pack_missing'] };
+  if (currentReport.ok !== true) throw new ActivationPackWriteBlockedError(currentReport.blockers ?? ['activation_pack_validation_failed']);
+  pack.validationReport = currentReport;
 }
 function publicJson(value) { return `${JSON.stringify(value, null, 2)}\n`; }
 export function buildActivationPackWritableFiles(pack) {

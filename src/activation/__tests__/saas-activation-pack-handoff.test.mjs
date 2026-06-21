@@ -11,6 +11,7 @@ import {
   buildV09FreezeCandidateSummary,
   computeActivationPackFingerprint,
   computeStableChecksum,
+  containsSensitivePublicInput,
   normalizeActivationIntentRoute,
   validateActivationIntent,
   validateSaaSActivationPack
@@ -47,6 +48,22 @@ test('imports and executes activation helpers under node:test', () => {
   assert.equal(pack.publicSafeSummary.status, pack.validationReport.status);
   assert.equal(computeActivationPackFingerprint(pack), pack.fingerprint);
   assert.equal(computeStableChecksum({ b: 1, a: 2 }), computeStableChecksum({ a: 2, b: 1 }));
+});
+
+
+test('blocks executable numeric PII-like public inputs', () => {
+  for (const notesPublicSafe of ['123456789', '123-456-789', '123 456 789', '00000000A']) {
+    assert.equal(containsSensitivePublicInput(notesPublicSafe), true);
+    const report = validateActivationIntent(buildDefaultSaaSActivationIntent({ notesPublicSafe }));
+    assert.equal(report.ok, false);
+    assert.ok(report.blockers.includes('blocked_sensitive_input:notesPublicSafe'));
+  }
+  for (const field of ['contactRef', 'organizationDraftRef', 'workspaceDraftRef']) {
+    const report = validateActivationIntent(buildDefaultSaaSActivationIntent({ [field]: '123456789' }));
+    assert.equal(report.ok, false);
+    assert.ok(report.blockers.includes(`blocked_sensitive_input:${field}`));
+  }
+  assert.equal(validateActivationIntent(buildCaseZeroActivationIntentFixture()).ok, true);
 });
 
 test('normalizes documented public route strings and blocks quarantined routes', () => {
@@ -106,6 +123,41 @@ test('writer writes zero files for URL refs and BYOK blocked plans', () => {
       assert.deepEqual(readdirSync(out), []);
     } finally { cleanup(out); }
   }
+});
+
+
+test('writer revalidates mutated packs at write time and writes zero files', () => {
+  const mutated = buildSaaSActivationPack(buildCaseZeroActivationIntentFixture());
+  mutated.intent.notesPublicSafe = '123456789';
+  const out = tempOutputDir();
+  try {
+    assert.equal(mutated.validationReport.ok, true);
+    assert.throws(() => buildActivationPackWritableFiles(mutated), (error) => {
+      assert.ok(error instanceof ActivationPackWriteBlockedError);
+      assert.ok(error.blockers.includes('blocked_sensitive_input:notesPublicSafe'));
+      assert.doesNotMatch(error.message, /123456789/);
+      return true;
+    });
+    assert.throws(() => writeSaaSActivationPack(mutated, out), ActivationPackWriteBlockedError);
+    assert.deepEqual(readdirSync(out), []);
+  } finally { cleanup(out); }
+});
+
+test('writer revalidates mutated draft refs before serialization', () => {
+  const mutated = buildSaaSActivationPack(buildCaseZeroActivationIntentFixture());
+  mutated.organizationWorkspaceDraft.organizationDraftId = 'https://evil.example/token';
+  mutated.intent.organizationDraftRef = 'https://evil.example/token';
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => buildActivationPackWritableFiles(mutated), ActivationPackWriteBlockedError);
+    assert.throws(() => writeSaaSActivationPack(mutated, out), (error) => {
+      assert.ok(error instanceof ActivationPackWriteBlockedError);
+      assert.ok(error.blockers.includes('blocked_sensitive_input:organizationDraftRef'));
+      assert.doesNotMatch(error.message, /evil\.example|token/);
+      return true;
+    });
+    assert.deepEqual(readdirSync(out), []);
+  } finally { cleanup(out); }
 });
 
 test('writer writes only expected files for allowed Case Zero pack', () => {

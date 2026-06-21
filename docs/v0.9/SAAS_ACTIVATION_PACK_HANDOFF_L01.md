@@ -32,7 +32,7 @@ The pack includes the selected operating path, organization/workspace draft, pla
 
 ## How to use the fixture
 
-Import executable helpers from `src/activation/saas-activation-pack-handoff.mjs` and `src/activation/saas-activation-pack-writer.mjs`. Use `buildCaseZeroActivationIntentFixture()` to create the deterministic Case Zero intent. Then call `buildSaaSActivationPack(intent)`, inspect `validationReport`, and only use the pack as operator-review evidence. The optional writer checks `validationReport.ok` before serializing, writes only the allowed public files under an explicit normalized output directory, and blocks traversal.
+Import executable helpers from `src/activation/saas-activation-pack-handoff.mjs` and `src/activation/saas-activation-pack-writer.mjs`. Use `buildCaseZeroActivationIntentFixture()` to create the deterministic Case Zero intent. Then call `buildSaaSActivationPack(intent)`, inspect `validationReport`, and only use the pack as operator-review evidence. The optional writer revalidates the current pack object at write time, checks the fresh `validationReport.ok` before serializing, writes only the allowed public files under an explicit normalized output directory, and blocks traversal. No public activation pack file may be produced unless the current pack object passes final validation at write time.
 
 ## How to validate
 
