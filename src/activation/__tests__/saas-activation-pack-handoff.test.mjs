@@ -12,6 +12,7 @@ import {
   computeActivationPackFingerprint,
   computeStableChecksum,
   containsSensitivePublicInput,
+  finalizeSaaSActivationPackForWrite,
   normalizeActivationIntentRoute,
   validateActivationIntent,
   validateSaaSActivationPack
@@ -158,6 +159,47 @@ test('writer revalidates mutated draft refs before serialization', () => {
     });
     assert.deepEqual(readdirSync(out), []);
   } finally { cleanup(out); }
+});
+
+
+test('writer blocks unsafe mutations across serialized draft surfaces', () => {
+  const mutations = [
+    (pack) => { pack.organizationWorkspaceDraft.workspaceDraftId = 'https://evil.example/token'; },
+    (pack) => { pack.organizationWorkspaceDraft.organizationDisplayName = 'person@example.invalid'; },
+    (pack) => { pack.organizationWorkspaceDraft.workspaceDisplayName = '123456789'; },
+    (pack) => { pack.commissioningChecklist[0].evidenceRef = 'https://evil.example/token'; },
+    (pack) => { pack.byokReadinessDraft.providerKinds = ['https://evil.example/token']; }
+  ];
+  for (const mutate of mutations) {
+    const pack = buildSaaSActivationPack(buildCaseZeroActivationIntentFixture());
+    mutate(pack);
+    const out = tempOutputDir();
+    try {
+      assert.throws(() => buildActivationPackWritableFiles(pack), (error) => {
+        assert.ok(error instanceof ActivationPackWriteBlockedError);
+        assert.doesNotMatch(error.message, /evil\.example|token|person@example|123456789/);
+        return true;
+      });
+      assert.throws(() => writeSaaSActivationPack(pack, out), ActivationPackWriteBlockedError);
+      assert.deepEqual(readdirSync(out), []);
+    } finally { cleanup(out); }
+  }
+});
+
+test('write-time finalizer recomputes fingerprint and summary for still-valid mutations', () => {
+  const pack = buildSaaSActivationPack(buildCaseZeroActivationIntentFixture());
+  const originalFingerprint = pack.fingerprint;
+  pack.organizationWorkspaceDraft.workspaceDisplayName = 'Case Zero Workspace Reviewed';
+  const files = buildActivationPackWritableFiles(pack);
+  const emittedPack = JSON.parse(files['activation-pack.public.json']);
+  assert.notEqual(emittedPack.fingerprint, originalFingerprint);
+  assert.equal(emittedPack.fingerprint, computeActivationPackFingerprint(emittedPack));
+  assert.equal(emittedPack.publicSafeSummary.status, emittedPack.validationReport.status);
+  assert.match(files['README_ACTIVATION_PACK.md'], new RegExp(emittedPack.fingerprint));
+  assert.doesNotMatch(files['README_ACTIVATION_PACK.md'], new RegExp(originalFingerprint));
+  assert.equal(pack.fingerprint, originalFingerprint);
+  const finalized = finalizeSaaSActivationPackForWrite(pack);
+  assert.equal(finalized.fingerprint, emittedPack.fingerprint);
 });
 
 test('writer writes only expected files for allowed Case Zero pack', () => {
