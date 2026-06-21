@@ -2,16 +2,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 const root = process.cwd(); const errors = []; const read = (p) => readFileSync(join(root,p),'utf8'); const exists = (p) => existsSync(join(root,p)); const fail = (m) => errors.push(m);
-for (const f of ['scripts/validate-v09-saas-activation-pack-handoff.mjs','docs/v0.9/V0_9_FREEZE_CANDIDATE.md','docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md','src/activation/saas-activation-pack-handoff.ts','src/activation/fixtures/case-zero-saas-activation.fixture.ts']) if (!exists(f)) fail(`missing freeze candidate dependency: ${f}`);
+for (const f of ['scripts/validate-v09-saas-activation-pack-handoff.mjs','docs/v0.9/V0_9_FREEZE_CANDIDATE.md','docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md','src/activation/saas-activation-pack-handoff.mjs','src/activation/fixtures/case-zero-saas-activation.fixture.mjs','src/activation/saas-activation-pack-writer.mjs']) if (!exists(f)) fail(`missing freeze candidate dependency: ${f}`);
 const pkg = JSON.parse(read('package.json'));
-for (const s of ['validate:v09-saas-activation-pack-handoff','validate:v09-freeze-candidate']) if (!pkg.scripts?.[s]) fail(`package script missing: ${s}`);
+for (const s of ['validate:v09-saas-activation-pack-handoff','validate:v09-freeze-candidate','test']) if (!pkg.scripts?.[s]) fail(`package script missing: ${s}`);
 const l01 = spawnSync('node', ['scripts/validate-v09-saas-activation-pack-handoff.mjs'], { cwd: root, encoding: 'utf8' }); if (l01.status !== 0) fail(`L01 validator does not pass conceptually: ${l01.stderr || l01.stdout}`);
-
-const domain = exists('src/activation/saas-activation-pack-handoff.ts') ? read('src/activation/saas-activation-pack-handoff.ts') : '';
+const domain = exists('src/activation/saas-activation-pack-handoff.mjs') ? read('src/activation/saas-activation-pack-handoff.mjs') : '';
+const writer = exists('src/activation/saas-activation-pack-writer.mjs') ? read('src/activation/saas-activation-pack-writer.mjs') : '';
 if (!domain.includes("pack.validationReport.ok === true ? 'freeze_candidate_ready' : 'freeze_blocked'")) fail('freeze candidate builder must block validationReport.ok false packs.');
-if (!domain.includes("pack.validationReport = validateSaaSActivationPack(pack); pack.publicSafeSummary = toPublicSaaSActivationPackSummary(pack); pack.fingerprint = computeActivationPackFingerprint(pack)")) fail('activation pack summary must be based on final validation report.');
+if (!domain.includes('pack.validationReport = validateSaaSActivationPack(pack); pack.publicSafeSummary = toPublicSaaSActivationPackSummary(pack); pack.fingerprint = computeActivationPackFingerprint(pack)')) fail('activation pack summary must be based on final validation report.');
 if (!domain.includes("pack.byokReadinessDraft.readinessStatus.startsWith('blocked_')")) fail('blocked BYOK readiness must fail pack validation.');
-const all = ['src/activation/saas-activation-pack-handoff.ts','src/activation/saas-activation-pack-writer.ts','docs/v0.9/V0_9_FREEZE_CANDIDATE.md','docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md'].filter(exists).map(read).join('\n');
+if (!domain.includes('normalizeActivationIntentRoute') || !domain.includes('/capsule/pricing') || !domain.includes('/capsule/demo')) fail('documented route normalization is required.');
+if (!writer.includes('pack?.validationReport?.ok !== true') || !writer.includes('ActivationPackWriteBlockedError')) fail('writer must fail closed for blocked packs.');
+const mod = await import('../src/activation/saas-activation-pack-handoff.mjs'); const writerMod = await import('../src/activation/saas-activation-pack-writer.mjs'); const blocked = mod.buildSaaSActivationPack(mod.buildDefaultSaaSActivationIntent({ operatingPath: 'local_byok', selectedPlanCode: 'capsule_starter' })); if (blocked.validationReport.ok !== false) fail('BYOK-ineligible executable pack must be blocked.'); if (mod.buildV09FreezeCandidateSummary(blocked).status !== 'freeze_blocked') fail('blocked executable pack must not be freeze candidate ready.'); try { writerMod.buildActivationPackWritableFiles(blocked); fail('writer must not serialize blocked executable pack.'); } catch (error) { if (error.name !== 'ActivationPackWriteBlockedError') fail(`unexpected writer error for blocked pack: ${error.name}`); }
+const all = [domain, writer, read('docs/v0.9/V0_9_FREEZE_CANDIDATE.md'), read('docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md')].join('\n');
 for (const p of [/fetch\s*\(/i,/axios/i,/stripe/i,/auth0|supabase|firebase/i,/postgres|mysql|mongodb/i,/process\.env/i]) if (p.test(all)) fail(`freeze candidate forbidden surface: ${p}`);
 const doc = exists('docs/v0.9/V0_9_FREEZE_CANDIDATE.md') ? read('docs/v0.9/V0_9_FREEZE_CANDIDATE.md') : '';
 for (const phrase of ['Web W01-W05, Runtime B01-B05 and Launcher L01 evidence','Final freeze happens after merge and post-merge cross-repo smoke/evidence','No live execution is introduced','No provider connection is introduced','No payment/auth integration is introduced']) if (!doc.includes(phrase)) fail(`freeze doc missing phrase: ${phrase}`);
