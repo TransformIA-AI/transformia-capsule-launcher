@@ -41,7 +41,12 @@ try { manifest = JSON.parse(read(manifestPath)); } catch (error) { fail(`manifes
 
 const allowedFreezeStatuses = new Set(['freeze_ready', 'freeze_blocked', 'freeze_candidate_pending_external_evidence']);
 const allowedEvidenceStatuses = new Set(['verified', 'present_unverified', 'missing', 'blocked', 'pending_external_evidence', 'not_applicable']);
-const requiredIds = ['W01', 'W02', 'W03', 'W04', 'W05', 'B01', 'B02', 'B03', 'B04', 'B05', 'L01'];
+const requiredIds = [
+  'W01', 'W02', 'W03', 'W04', 'W05',
+  'B01', 'B02', 'B03', 'B04', 'B05',
+  'L01',
+  'X01', 'X02', 'X03', 'X04', 'X05', 'X06', 'X07'
+];
 
 function getEvidenceLabel(item) {
   const id = typeof item?.id === 'string' && item.id ? item.id : '<missing-id>';
@@ -62,6 +67,11 @@ function assertFreezeReadyEvidenceComplete(candidateManifest, report = fail) {
     report('freeze_ready requires requiredEvidence to exist as a non-empty array');
     return;
   }
+  const byId = new Map(candidateManifest.requiredEvidence.map((item) => [item?.id, item]));
+  const missingIds = requiredIds.filter((id) => !byId.has(id));
+  if (missingIds.length > 0) {
+    report(`freeze_ready requires all canonical required evidence ids; missing ids: ${missingIds.join(', ')}`);
+  }
   const nonVerified = candidateManifest.requiredEvidence
     .filter((item) => item?.status !== 'verified')
     .map((item) => `${getEvidenceLabel(item)} status=${String(item?.status ?? '<missing-status>')}`);
@@ -77,10 +87,12 @@ if (manifest) {
   if (!Array.isArray(manifest.requiredEvidence)) fail('manifest.requiredEvidence must be an array');
   if (!Array.isArray(manifest.pendingExternalEvidence)) fail('manifest.pendingExternalEvidence must be an array');
   const byId = new Map((manifest.requiredEvidence || []).map((item) => [item.id, item]));
-  for (const id of requiredIds) if (!byId.has(id)) fail(`required evidence item missing from manifest: ${id}`);
+  const missingRequiredIds = requiredIds.filter((id) => !byId.has(id));
+  if (missingRequiredIds.length > 0) fail(`required evidence items missing from manifest: ${missingRequiredIds.join(', ')}`);
   for (const id of ['W01', 'W02', 'W03', 'W04', 'W05']) if (byId.get(id)?.area !== 'WEB') fail(`manifest Web item invalid or removed: ${id}`);
   for (const id of ['B01', 'B02', 'B03', 'B04', 'B05']) if (byId.get(id)?.area !== 'RUNTIME') fail(`manifest Runtime item invalid or removed: ${id}`);
   if (byId.get('L01')?.area !== 'LAUNCHER') fail('manifest Launcher L01 item invalid or removed');
+  for (const id of ['X01', 'X02', 'X03', 'X04', 'X05', 'X06', 'X07']) if (byId.get(id)?.area !== 'CROSS-REPO') fail(`manifest Cross-repo item invalid or removed: ${id}`);
   for (const item of manifest.requiredEvidence || []) {
     for (const field of ['repo', 'expectedArtifact', 'observedArtifact', 'prOrMergeCommit', 'validationCommand', 'status', 'notes', 'blocker']) {
       if (!(field in item)) fail(`required proof field missing for ${item.id || '<unknown>'}: ${field}`);
@@ -178,10 +190,23 @@ function runRegressionSelfChecks() {
       fail(`freeze_ready regression fixture did not fail for ${id} status=${status}`);
     }
   };
+  const missingCrossRepoFixture = JSON.parse(JSON.stringify(baseFreezeReadyManifest));
+  missingCrossRepoFixture.requiredEvidence = missingCrossRepoFixture.requiredEvidence.filter((item) => !String(item.id).startsWith('X'));
+  const missingCrossRepoErrors = [];
+  assertFreezeReadyEvidenceComplete(missingCrossRepoFixture, (message) => missingCrossRepoErrors.push(message));
+  if (!missingCrossRepoErrors.some((message) => message.includes('missing ids: X01, X02, X03, X04, X05, X06, X07'))) {
+    fail('freeze_ready regression fixture did not fail when X01-X07 were omitted');
+  }
   for (const [id, status] of [
     ['W01', 'pending_external_evidence'],
     ['X01', 'pending_external_evidence'],
     ['X02', 'pending'],
+    ['X03', 'missing'],
+    ['X03', 'skipped'],
+    ['X03', 'draft'],
+    ['X03', 'blocked'],
+    ['X03', 'unknown'],
+    ['X03', 'not_applicable'],
     ['X05', 'pending_external_evidence'],
     ['X07', 'pending_external_evidence']
   ]) {
