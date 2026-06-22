@@ -9,3 +9,6 @@ Final freeze happens after merge and post-merge cross-repo smoke/evidence. It do
 No live execution is introduced. No provider connection is introduced. No payment/auth integration is introduced. No database write, analytics submit, CRM submit, external embed, connector execution, private runtime inclusion or deployment side effect is introduced.
 
 Launcher L01 is freeze-candidate ready only when its validator, tests and quality checks pass on the merged code and the required Web and Runtime evidence is reviewed.
+## Global freeze evidence pointer
+
+Global v0.9 freeze decision is now governed by [`V0_9_FREEZE_EVIDENCE_PACK.md`](V0_9_FREEZE_EVIDENCE_PACK.md). This document remains Launcher-specific L01 evidence only; Launcher evidence alone must not declare global v0.9 frozen.

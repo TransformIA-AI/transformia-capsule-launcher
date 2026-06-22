@@ -1,0 +1,62 @@
+{
+  "version": "v0.9",
+  "capability": "Self-Service Cloud & Private Workspace",
+  "status": "freeze_candidate_pending_external_evidence",
+  "generatedAt": "2026-06-22T00:00:00.000Z",
+  "repos": {
+    "web": {
+      "name": "TransformIA Web Flagship",
+      "evidenceLocation": "external_repo_required",
+      "status": "pending_external_evidence"
+    },
+    "runtime": {
+      "name": "TransformIA Private Runtime / Exocortex",
+      "evidenceLocation": "external_repo_required",
+      "status": "pending_external_evidence"
+    },
+    "launcher": {
+      "name": "TransformIA-AI/transformia-capsule-launcher",
+      "evidenceLocation": "this_repository",
+      "status": "present_unverified"
+    }
+  },
+  "requiredEvidence": [
+    { "id": "W01", "area": "WEB", "name": "Self-Service Private Workspace Shell", "repo": "web", "expectedArtifact": "Web PR, route evidence and smoke output", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "web_owned_smoke_command", "status": "pending_external_evidence", "notes": "External Web proof required.", "blocker": "Web W01 evidence is not accessible in Launcher." },
+    { "id": "W02", "area": "WEB", "name": "SaaS Product Landing + Pricing + Trial CTA", "repo": "web", "expectedArtifact": "Web PR, pricing/trial CTA audit and smoke output", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "web_owned_smoke_command", "status": "pending_external_evidence", "notes": "External Web proof required.", "blocker": "Web W02 evidence is not accessible in Launcher." },
+    { "id": "W03", "area": "WEB", "name": "Onboarding Wizard & Capsule Activation Flow", "repo": "web", "expectedArtifact": "Web PR, activation flow audit and smoke output", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "web_owned_smoke_command", "status": "pending_external_evidence", "notes": "External Web proof required.", "blocker": "Web W03 evidence is not accessible in Launcher." },
+    { "id": "W04", "area": "WEB", "name": "Portal Vivo WOW Demo Surface", "repo": "web", "expectedArtifact": "Web PR, deployed demo smoke and screenshots if needed", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "web_owned_smoke_command", "status": "pending_external_evidence", "notes": "External Web proof required.", "blocker": "Web W04 evidence is not accessible in Launcher." },
+    { "id": "W05", "area": "WEB", "name": "Billing, Usage & BYOK UI Preview", "repo": "web", "expectedArtifact": "Web PR, UI audit and smoke output", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "web_owned_smoke_command", "status": "pending_external_evidence", "notes": "External Web proof required.", "blocker": "Web W05 evidence is not accessible in Launcher." },
+    { "id": "B01", "area": "RUNTIME", "name": "Organizations / Workspaces / Memberships / RBAC", "repo": "runtime", "expectedArtifact": "Runtime PR or audit evidence", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "runtime_owned_audit_command", "status": "pending_external_evidence", "notes": "External Runtime proof required.", "blocker": "Runtime B01 evidence is not accessible in Launcher." },
+    { "id": "B02", "area": "RUNTIME", "name": "Usage / Metering / Billing Ledger", "repo": "runtime", "expectedArtifact": "Runtime PR or audit evidence", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "runtime_owned_audit_command", "status": "pending_external_evidence", "notes": "External Runtime proof required.", "blocker": "Runtime B02 evidence is not accessible in Launcher." },
+    { "id": "B03", "area": "RUNTIME", "name": "Plan Entitlements / Trial State Machine", "repo": "runtime", "expectedArtifact": "Runtime PR or audit evidence", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "runtime_owned_audit_command", "status": "pending_external_evidence", "notes": "External Runtime proof required.", "blocker": "Runtime B03 evidence is not accessible in Launcher." },
+    { "id": "B04", "area": "RUNTIME", "name": "Business Memory Retrieval / Customer Timeline", "repo": "runtime", "expectedArtifact": "Runtime PR or audit evidence", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "runtime_owned_audit_command", "status": "pending_external_evidence", "notes": "External Runtime proof required.", "blocker": "Runtime B04 evidence is not accessible in Launcher." },
+    { "id": "B05", "area": "RUNTIME", "name": "BYOK / Credential Readiness", "repo": "runtime", "expectedArtifact": "Runtime PR or audit evidence", "observedArtifact": "Not available in this repository", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "runtime_owned_audit_command", "status": "pending_external_evidence", "notes": "External Runtime proof required.", "blocker": "Runtime B05 evidence is not accessible in Launcher." },
+    { "id": "L01", "area": "LAUNCHER", "name": "SaaS Activation Pack Handoff", "repo": "launcher", "expectedArtifact": "Launcher docs, executable validators and public-safe activation pack checks", "observedArtifact": "docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md; docs/v0.9/V0_9_FREEZE_CANDIDATE.md; scripts/validate-v09-saas-activation-pack-handoff.mjs; scripts/validate-v09-freeze-candidate.mjs", "prOrMergeCommit": "PR #16 / 82c90a7", "validationCommand": "npm run -s validate:v09-saas-activation-pack-handoff && npm run -s validate:v09-freeze-candidate", "status": "present_unverified", "notes": "Present in this repository; final freeze still requires rerun and post-merge evidence.", "blocker": "Post-merge command output still required for final freeze." },
+    { "id": "X01", "area": "CROSS-REPO", "name": "public-to-private authority boundary", "repo": "cross_repo", "expectedArtifact": "Cross-repo audit notes", "observedArtifact": "Launcher boundary docs present; external Web/Runtime proof pending", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "repo_specific_quality_gates", "status": "pending_external_evidence", "notes": "Boundary must be confirmed across repos.", "blocker": "External Web/Runtime proof required." },
+    { "id": "X02", "area": "CROSS-REPO", "name": "no fake live claims", "repo": "cross_repo", "expectedArtifact": "Cross-repo claim scan", "observedArtifact": "Launcher validator added; external scans pending", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "repo_specific_claim_validators", "status": "pending_external_evidence", "notes": "Claims must match implemented evidence.", "blocker": "External scan outputs required." },
+    { "id": "X03", "area": "CROSS-REPO", "name": "no auto purchase/provisioning claims", "repo": "cross_repo", "expectedArtifact": "Cross-repo claim scan", "observedArtifact": "Launcher validator added; external scans pending", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "repo_specific_claim_validators", "status": "pending_external_evidence", "notes": "Public copy must avoid purchase/provisioning overclaim.", "blocker": "External scan outputs required." },
+    { "id": "X04", "area": "CROSS-REPO", "name": "no raw secrets/PII in fixtures/docs", "repo": "cross_repo", "expectedArtifact": "Cross-repo secret/PII scan", "observedArtifact": "Launcher validator added; external scans pending", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "repo_specific_secret_pii_validators", "status": "pending_external_evidence", "notes": "Public evidence must stay safe.", "blocker": "External scan outputs required." },
+    { "id": "X05", "area": "CROSS-REPO", "name": "route quarantine still active", "repo": "cross_repo", "expectedArtifact": "Cross-repo route audit", "observedArtifact": "Launcher L01 route quarantine present; external route evidence pending", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "repo_specific_route_validators", "status": "pending_external_evidence", "notes": "Quarantined routes must not be public CTA targets.", "blocker": "External route proof required." },
+    { "id": "X06", "area": "CROSS-REPO", "name": "quality gates passed", "repo": "cross_repo", "expectedArtifact": "Quality outputs from Web, Runtime and Launcher", "observedArtifact": "Launcher gates run in this PR; external gates pending", "prOrMergeCommit": "pending_external_evidence", "validationCommand": "npm run -s quality plus external equivalents", "status": "pending_external_evidence", "notes": "All owning repos must provide command output.", "blocker": "External quality outputs required." },
+    { "id": "X07", "area": "CROSS-REPO", "name": "post-merge smoke captured", "repo": "cross_repo", "expectedArtifact": "Smoke record after merge", "observedArtifact": "Not yet captured", "prOrMergeCommit": "pending_post_merge_evidence", "validationCommand": "manual_smoke_commands", "status": "pending_external_evidence", "notes": "Required after merge before global freeze.", "blocker": "Post-merge smoke evidence required." }
+  ],
+  "decisionRules": [
+    "If any required Web/Runtime/Launcher item is missing, status must be freeze_blocked.",
+    "If Launcher L01 is verified but Web/Runtime evidence is not accessible in this repository, status must be freeze_candidate_pending_external_evidence.",
+    "If all required evidence is verified and smoke passes, status may be freeze_ready.",
+    "Never claim freeze_ready from docs alone.",
+    "Never claim freeze_ready if any validator is marker-only.",
+    "Never claim freeze_ready if any component claims live execution without gated evidence."
+  ],
+  "blockers": [],
+  "pendingExternalEvidence": [
+    "Web W01-W05 PR or audit evidence",
+    "Web production smoke for public routes",
+    "Runtime B01-B05 PR or audit evidence",
+    "Runtime quality or audit command output",
+    "Cross-repo route quarantine proof",
+    "Cross-repo claim scan output",
+    "Post-merge smoke record"
+  ],
+  "publicSafe": true
+}

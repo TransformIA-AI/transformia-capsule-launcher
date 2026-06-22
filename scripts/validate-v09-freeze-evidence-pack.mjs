@@ -1,0 +1,181 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+
+const root = process.cwd();
+const errors = [];
+const fail = (message) => errors.push(message);
+const exists = (path) => existsSync(join(root, path));
+const read = (path) => readFileSync(join(root, path), 'utf8');
+const normalize = (path) => path.replaceAll('\\', '/');
+
+const packPath = 'docs/v0.9/V0_9_FREEZE_EVIDENCE_PACK.md';
+const manifestPath = 'docs/v0.9/evidence/v0_9_freeze_evidence_manifest.public.json';
+const templatePath = 'docs/v0.9/evidence/LOCAL_EVIDENCE_CAPTURE_TEMPLATE.md';
+const validatorPath = 'scripts/validate-v09-freeze-evidence-pack.mjs';
+const requiredL01Artifacts = [
+  'docs/v0.9/SAAS_ACTIVATION_PACK_HANDOFF_L01.md',
+  'docs/v0.9/V0_9_FREEZE_CANDIDATE.md',
+  'scripts/validate-v09-saas-activation-pack-handoff.mjs',
+  'scripts/validate-v09-freeze-candidate.mjs'
+];
+
+for (const file of [packPath, manifestPath, templatePath, validatorPath, ...requiredL01Artifacts]) {
+  if (!exists(file)) fail(`missing required file: ${file}`);
+}
+
+let pkg = {};
+try { pkg = JSON.parse(read('package.json')); } catch (error) { fail(`package.json must parse as JSON: ${error.message}`); }
+if (pkg.scripts?.['validate:v09-freeze-evidence-pack'] !== 'node scripts/validate-v09-freeze-evidence-pack.mjs') {
+  fail('package script missing: validate:v09-freeze-evidence-pack');
+}
+for (const scriptName of ['validate:v09-saas-activation-pack-handoff', 'validate:v09-freeze-candidate']) {
+  if (!pkg.scripts?.[scriptName]) fail(`required Launcher L01 validator is not registered: ${scriptName}`);
+}
+if (!pkg.scripts?.quality?.includes('validate:v09-freeze-evidence-pack')) {
+  fail('quality must include validate:v09-freeze-evidence-pack');
+}
+
+let manifest = null;
+try { manifest = JSON.parse(read(manifestPath)); } catch (error) { fail(`manifest must parse as JSON: ${error.message}`); }
+
+const allowedFreezeStatuses = new Set(['freeze_ready', 'freeze_blocked', 'freeze_candidate_pending_external_evidence']);
+const allowedEvidenceStatuses = new Set(['verified', 'present_unverified', 'missing', 'blocked', 'pending_external_evidence', 'not_applicable']);
+const requiredIds = ['W01', 'W02', 'W03', 'W04', 'W05', 'B01', 'B02', 'B03', 'B04', 'B05', 'L01'];
+
+if (manifest) {
+  if (manifest.publicSafe !== true) fail('manifest.publicSafe must be true');
+  if (manifest.version !== 'v0.9') fail('manifest.version must be v0.9');
+  if (!allowedFreezeStatuses.has(manifest.status)) fail(`manifest.status is invalid: ${manifest.status}`);
+  if (!Array.isArray(manifest.requiredEvidence)) fail('manifest.requiredEvidence must be an array');
+  if (!Array.isArray(manifest.pendingExternalEvidence)) fail('manifest.pendingExternalEvidence must be an array');
+  const byId = new Map((manifest.requiredEvidence || []).map((item) => [item.id, item]));
+  for (const id of requiredIds) if (!byId.has(id)) fail(`required evidence item missing from manifest: ${id}`);
+  for (const id of ['W01', 'W02', 'W03', 'W04', 'W05']) if (byId.get(id)?.area !== 'WEB') fail(`manifest Web item invalid or removed: ${id}`);
+  for (const id of ['B01', 'B02', 'B03', 'B04', 'B05']) if (byId.get(id)?.area !== 'RUNTIME') fail(`manifest Runtime item invalid or removed: ${id}`);
+  if (byId.get('L01')?.area !== 'LAUNCHER') fail('manifest Launcher L01 item invalid or removed');
+  for (const item of manifest.requiredEvidence || []) {
+    for (const field of ['repo', 'expectedArtifact', 'observedArtifact', 'prOrMergeCommit', 'validationCommand', 'status', 'notes', 'blocker']) {
+      if (!(field in item)) fail(`required proof field missing for ${item.id || '<unknown>'}: ${field}`);
+    }
+    if (!allowedEvidenceStatuses.has(item.status)) fail(`invalid evidence status for ${item.id}: ${item.status}`);
+  }
+  if (manifest.status === 'freeze_ready') {
+    if ((manifest.pendingExternalEvidence || []).length > 0) fail('manifest cannot be freeze_ready while pendingExternalEvidence is non-empty');
+    for (const item of manifest.requiredEvidence || []) {
+      if (['WEB', 'RUNTIME', 'LAUNCHER'].includes(item.area) && item.status !== 'verified') {
+        fail(`freeze_ready requires verified required evidence: ${item.id}`);
+      }
+    }
+  }
+}
+
+const docs = [packPath, manifestPath, templatePath, 'docs/v0.9/V0_9_FREEZE_CANDIDATE.md'].filter(exists).map(read).join('\n');
+for (const phrase of [
+  'freeze_candidate_pending_external_evidence',
+  'Never claim `freeze_ready` from docs alone',
+  'Web W01-W05',
+  'Runtime B01-B05',
+  'Launcher-specific L01 evidence only'
+]) {
+  if (!docs.includes(phrase)) fail(`freeze evidence docs missing required phrase: ${phrase}`);
+}
+
+const unsafeClaimPatterns = [
+  /(^|[^a-z])production live execution(?!\.)/i,
+  /(^|[^a-z])automatic purchase/i,
+  /(^|[^a-z])instant provisioning/i,
+  /(^|[^a-z])compliance certified/i,
+  /(^|[^a-z])guaranteed ROI/i,
+  /(^|[^a-z])payment connected(?!\.)/i,
+  /(^|[^a-z])auth connected(?!\.)/i
+];
+const allowedNegatedClaims = [
+  'does not mean production live execution',
+  'does not mean payment provider connected',
+  'does not mean auth provider connected',
+  'does not mean enterprise compliance certification',
+  'does not mean ROI guarantee'
+];
+let claimScanText = docs;
+for (const allowed of allowedNegatedClaims) claimScanText = claimScanText.replaceAll(allowed, '');
+for (const pattern of unsafeClaimPatterns) if (pattern.test(claimScanText)) fail(`forbidden claim phrase found: ${pattern}`);
+
+const secretPatterns = [
+  /sk_live_[A-Za-z0-9_]+/i,
+  /ghp_[A-Za-z0-9_]{20,}/i,
+  /AKIA[0-9A-Z]{16}/,
+  /BEGIN (RSA |EC |OPENSSH |PRIVATE )?PRIVATE KEY/,
+  /(?:api[_-]?key|secret|token|password)\s*[:=]\s*['\"][^'\"]{8,}['\"]/i
+];
+for (const pattern of secretPatterns) if (pattern.test(docs)) fail(`secret/token/API-key-like string found: ${pattern}`);
+const piiPatterns = [
+  /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+  /(?:\+\d[\d .-]{7,}\d|\b\d{3}[-. ]\d{3}[-. ]\d{3,4}\b)/
+];
+for (const pattern of piiPatterns) if (pattern.test(docs)) fail(`PII-shaped string found: ${pattern}`);
+
+const publicCtaPattern = /(?:href|url|cta|target|route|sourceRoute|publicRoute|public CTA)[^\n]{0,80}(\/case-zero|\/pilot|\/cockpit|\/connectors|\/private|\/demo\/cockpit|\/demo\/flujo|\/portal-vivo)/i;
+if (publicCtaPattern.test(docs)) fail('private route appears as a public CTA');
+
+const validatorSource = exists(validatorPath) ? read(validatorPath) : '';
+for (const token of ['execFileSync', 'spawnSync', 'PR_BASE_SHA', 'GITHUB_EVENT_PATH', 'GITHUB_BASE_REF', 'gitDiffNames', 'ls-files', 'requiredIds', 'manifest.requiredEvidence']) {
+  if (!validatorSource.includes(token)) fail(`validator missing real-check token: ${token}`);
+}
+if (/execFileSync\([^,]+\+|spawnSync\([^,]+\+/.test(validatorSource)) fail('validator must not build shell command strings');
+
+function git(args) {
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim().split(/\r?\n/).filter(Boolean).map(normalize) : [];
+}
+function gitScalar(args) {
+  try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; }
+}
+function baseCandidates() {
+  const out = [];
+  for (const key of ['PR_BASE_SHA', 'GITHUB_BASE_SHA', 'BASE_SHA']) if (process.env[key]) out.push(process.env[key]);
+  if (process.env.GITHUB_EVENT_PATH && existsSync(process.env.GITHUB_EVENT_PATH)) {
+    try {
+      const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+      if (event.pull_request?.base?.sha) out.push(event.pull_request.base.sha);
+      if (event.pull_request?.base?.ref) out.push(`origin/${event.pull_request.base.ref}`);
+    } catch (error) { fail(`could not parse GITHUB_EVENT_PATH: ${error.message}`); }
+  }
+  if (process.env.GITHUB_BASE_REF) out.push(`origin/${process.env.GITHUB_BASE_REF}`);
+  out.push('origin/main', 'main', 'HEAD^');
+  return out;
+}
+function gitDiffNames(base) {
+  let files = git(['diff', '--name-only', `${base}...HEAD`]);
+  if (!files.length) files = git(['diff', '--name-only', `${base}..HEAD`]);
+  return files;
+}
+const changed = new Set();
+for (const base of baseCandidates()) {
+  const files = gitDiffNames(base);
+  if (files.length) { files.forEach((file) => changed.add(file)); break; }
+}
+for (const args of [['diff', '--name-only'], ['diff', '--name-only', '--cached'], ['ls-files', '--others', '--exclude-standard']]) {
+  git(args).forEach((file) => changed.add(file));
+}
+if (!changed.size) fail('changed-file guard found no files; validator must inspect real changed files');
+
+const allowedChanged = new Set([packPath, manifestPath, templatePath, validatorPath, 'package.json', 'docs/v0.9/V0_9_FREEZE_CANDIDATE.md']);
+for (const file of changed) {
+  if (!exists(file)) continue;
+  const isAllowedTaskFile = allowedChanged.has(file);
+  const text = read(file);
+  if (!isAllowedTaskFile) continue;
+  for (const pattern of secretPatterns) if (pattern.test(text)) fail(`changed file contains secret-shaped material: ${file}`);
+  for (const pattern of piiPatterns) if (pattern.test(text)) fail(`changed file contains PII-shaped material: ${file}`);
+  if (file !== validatorPath && publicCtaPattern.test(text)) fail(`changed file exposes private route as public CTA: ${file}`);
+}
+
+const branch = gitScalar(['branch', '--show-current']);
+if (branch && branch !== 'docs/v09-freeze-evidence-pack') fail(`unexpected branch for this task: ${branch}`);
+
+if (errors.length) {
+  console.error(errors.map((error) => `- ${error}`).join('\n'));
+  process.exit(1);
+}
+console.log('v0.9 freeze evidence pack validator passed.');
