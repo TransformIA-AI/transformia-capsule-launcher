@@ -9,11 +9,13 @@ import {
   buildDefaultSaaSActivationIntent,
   buildSaaSActivationPack,
   buildV09FreezeCandidateSummary,
+  canonicalizeActivationIntentForPublicSnapshot,
   computeActivationPackFingerprint,
   computeStableChecksum,
   containsSensitivePublicInput,
   finalizeSaaSActivationPackForWrite,
   normalizeActivationIntentRoute,
+  sanitizeBlockerCode,
   validateActivationIntent,
   validateSaaSActivationPack
 } from '../saas-activation-pack-handoff.mjs';
@@ -91,6 +93,59 @@ test('blocked BYOK-ineligible packs are not freeze-ready', () => {
     assert.equal(buildV09FreezeCandidateSummary(pack).status, 'freeze_blocked');
     assert.notEqual(pack.publicSafeSummary.status, 'ready_for_operator_review');
   }
+});
+
+
+test('canonical public snapshot projection blocks raw source and requestedAt values', () => {
+  const sourceIntent = buildDefaultSaaSActivationIntent({ source: 'sk_live_x' });
+  const sourcePack = buildSaaSActivationPack(sourceIntent);
+  assert.equal(sourcePack.validationReport.ok, false);
+  assert.ok(sourcePack.validationReport.blockers.includes('blocked_invalid_source'));
+  assert.notEqual(sourcePack.intent.source, 'sk_live_x');
+  assert.doesNotMatch(JSON.stringify(sourcePack.intent), /sk_live_x/);
+  assert.deepEqual(canonicalizeActivationIntentForPublicSnapshot({ source: 'sk_live_x' }).blockers, ['blocked_invalid_source']);
+
+  const requestedAtPack = buildSaaSActivationPack(buildDefaultSaaSActivationIntent({ requestedAt: 'https://evil.example' }));
+  assert.equal(requestedAtPack.validationReport.ok, false);
+  assert.ok(requestedAtPack.validationReport.blockers.includes('blocked_invalid_requested_at'));
+  assert.doesNotMatch(JSON.stringify(requestedAtPack.intent), /evil\.example/);
+});
+
+test('writer writes zero files and redacts blockers for invalid intent fields', () => {
+  const cases = [
+    { input: { source: 'sk_live_x' }, raw: /sk_live_x/, blocker: 'blocked_invalid_source' },
+    { input: { requestedAt: 'https://evil.example' }, raw: /evil\.example/, blocker: 'blocked_invalid_requested_at' },
+    { input: { operatingPath: 'sk_live_x' }, raw: /sk_live_x/, blocker: 'blocked_invalid_operating_path' }
+  ];
+  for (const { input, raw, blocker } of cases) {
+    const pack = buildSaaSActivationPack(buildDefaultSaaSActivationIntent(input));
+    const out = tempOutputDir();
+    try {
+      assert.throws(() => buildActivationPackWritableFiles(pack), (error) => {
+        assert.ok(error instanceof ActivationPackWriteBlockedError);
+        assert.ok(error.blockers.includes(blocker));
+        assert.doesNotMatch(error.message, raw);
+        return true;
+      });
+      assert.throws(() => writeSaaSActivationPack(pack, out), ActivationPackWriteBlockedError);
+      assert.deepEqual(readdirSync(out), []);
+    } finally { cleanup(out); }
+  }
+});
+
+test('allowed canonical routes still validate and blocked routes remain blocked', () => {
+  assert.equal(validateActivationIntent(buildDefaultSaaSActivationIntent({ sourceRoute: '/capsule/pricing' })).ok, true);
+  assert.equal(validateActivationIntent(buildDefaultSaaSActivationIntent({ sourceRoute: '/capsule/demo' })).ok, true);
+  const blocked = buildSaaSActivationPack(buildDefaultSaaSActivationIntent({ sourceRoute: '/portal-vivo' }));
+  assert.equal(blocked.validationReport.ok, false);
+  assert.ok(blocked.validationReport.blockers.includes('blocked_quarantined_route'));
+});
+
+test('blocker codes are sanitized and do not preserve raw invalid values', () => {
+  assert.equal(sanitizeBlockerCode('source:sk_live_x'), 'blocked_invalid_source');
+  assert.equal(sanitizeBlockerCode('requestedAt:https://evil.example'), 'blocked_invalid_requested_at');
+  const pack = buildSaaSActivationPack(buildDefaultSaaSActivationIntent({ source: 'sk_live_x', requestedAt: 'https://evil.example' }));
+  assert.doesNotMatch(JSON.stringify(pack.validationReport.blockers), /sk_live_x|evil\.example/);
 });
 
 test('writer fails closed before serializing blocked sensitive packs', () => {

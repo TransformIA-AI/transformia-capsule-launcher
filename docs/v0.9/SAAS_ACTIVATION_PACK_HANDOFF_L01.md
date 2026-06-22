@@ -34,6 +34,11 @@ The pack includes the selected operating path, organization/workspace draft, pla
 
 Import executable helpers from `src/activation/saas-activation-pack-handoff.mjs` and `src/activation/saas-activation-pack-writer.mjs`. Use `buildCaseZeroActivationIntentFixture()` to create the deterministic Case Zero intent. Then call `buildSaaSActivationPack(intent)`, inspect `validationReport`, and only use the pack as operator-review evidence. The optional writer revalidates the current pack object at write time, checks the fresh `validationReport.ok` before serializing, writes only the allowed public files under an explicit normalized output directory, and blocks traversal. No public activation pack file may be produced unless the current pack object passes final validation at write time.
 
+
+## Canonical Public Snapshot Projection
+
+Raw public intent is never serialized directly. The Launcher first projects intent through `canonicalizeActivationIntentForPublicSnapshot()`, using allowlisted sources, normalized public routes, allowed regions, allowed operating paths, canonical plan codes, strict locale and UTC timestamp formats, safe refs and public-safe text validation. Invalid values become canonical blocker codes and are not copied into `activation-intent.public.json`, `activation-pack.public.json`, blocker messages or writer errors. The writer emits only the canonical `finalPack`, rebuilds `validationReport`, `publicSafeSummary` and fingerprint at write time, and blocked packs write zero files. This Launcher PR does not declare global v0.9 frozen.
+
 ## Write-time finalization invariant
 
 The writer treats the incoming pack as mutable and untrusted. Before any public serialization, it finalizes a cloned current pack, revalidates every serialized public surface, recomputes the validation report, recomputes the public-safe summary from that final report, and recomputes the fingerprint from the final serialized content. Blocked or mutated unsafe packs write zero files.
