@@ -123,6 +123,10 @@ for (const token of ['execFileSync', 'spawnSync', 'PR_BASE_SHA', 'GITHUB_EVENT_P
   if (!validatorSource.includes(token)) fail(`validator missing real-check token: ${token}`);
 }
 if (/execFileSync\([^,]+\+|spawnSync\([^,]+\+/.test(validatorSource)) fail('validator must not build shell command strings');
+const prohibitedBranchGateMessage = ['unexpected', 'branch', 'for', 'this', 'task'].join(' ');
+if (validatorSource.includes(prohibitedBranchGateMessage)) fail('validator must not hard-fail on branch names');
+if (/branch['"],\s*['"]--show-current['"][\s\S]{0,240}fail\s*\(/.test(validatorSource)) fail('validator must not use git branch --show-current as a hard fail condition');
+if (/docs\/v09-freeze-evidence-pack[\s\S]{0,160}fail\s*\(/.test(validatorSource)) fail('validator must not gate execution on the feature branch name');
 
 function git(args) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
@@ -170,9 +174,6 @@ for (const file of changed) {
   for (const pattern of piiPatterns) if (pattern.test(text)) fail(`changed file contains PII-shaped material: ${file}`);
   if (file !== validatorPath && publicCtaPattern.test(text)) fail(`changed file exposes private route as public CTA: ${file}`);
 }
-
-const branch = gitScalar(['branch', '--show-current']);
-if (branch && branch !== 'docs/v09-freeze-evidence-pack') fail(`unexpected branch for this task: ${branch}`);
 
 if (errors.length) {
   console.error(errors.map((error) => `- ${error}`).join('\n'));
