@@ -43,6 +43,33 @@ const allowedFreezeStatuses = new Set(['freeze_ready', 'freeze_blocked', 'freeze
 const allowedEvidenceStatuses = new Set(['verified', 'present_unverified', 'missing', 'blocked', 'pending_external_evidence', 'not_applicable']);
 const requiredIds = ['W01', 'W02', 'W03', 'W04', 'W05', 'B01', 'B02', 'B03', 'B04', 'B05', 'L01'];
 
+function getEvidenceLabel(item) {
+  const id = typeof item?.id === 'string' && item.id ? item.id : '<missing-id>';
+  const area = typeof item?.area === 'string' && item.area ? item.area : '<missing-area>';
+  const name = typeof item?.name === 'string' && item.name ? item.name : '<missing-name>';
+  return `${id} (${area}: ${name})`;
+}
+
+function assertFreezeReadyEvidenceComplete(candidateManifest, report = fail) {
+  if (!Array.isArray(candidateManifest?.pendingExternalEvidence)) {
+    report('freeze_ready requires pendingExternalEvidence to exist as an empty array');
+    return;
+  }
+  if (candidateManifest.pendingExternalEvidence.length > 0) {
+    report('manifest cannot be freeze_ready while pendingExternalEvidence is non-empty');
+  }
+  if (!Array.isArray(candidateManifest?.requiredEvidence) || candidateManifest.requiredEvidence.length === 0) {
+    report('freeze_ready requires requiredEvidence to exist as a non-empty array');
+    return;
+  }
+  const nonVerified = candidateManifest.requiredEvidence
+    .filter((item) => item?.status !== 'verified')
+    .map((item) => `${getEvidenceLabel(item)} status=${String(item?.status ?? '<missing-status>')}`);
+  if (nonVerified.length > 0) {
+    report(`freeze_ready requires every requiredEvidence item to be verified; non-verified evidence: ${nonVerified.join('; ')}`);
+  }
+}
+
 if (manifest) {
   if (manifest.publicSafe !== true) fail('manifest.publicSafe must be true');
   if (manifest.version !== 'v0.9') fail('manifest.version must be v0.9');
@@ -61,12 +88,7 @@ if (manifest) {
     if (!allowedEvidenceStatuses.has(item.status)) fail(`invalid evidence status for ${item.id}: ${item.status}`);
   }
   if (manifest.status === 'freeze_ready') {
-    if ((manifest.pendingExternalEvidence || []).length > 0) fail('manifest cannot be freeze_ready while pendingExternalEvidence is non-empty');
-    for (const item of manifest.requiredEvidence || []) {
-      if (['WEB', 'RUNTIME', 'LAUNCHER'].includes(item.area) && item.status !== 'verified') {
-        fail(`freeze_ready requires verified required evidence: ${item.id}`);
-      }
-    }
+    assertFreezeReadyEvidenceComplete(manifest);
   }
 }
 
@@ -82,7 +104,12 @@ for (const phrase of [
 }
 
 const unsafeClaimPatterns = [
-  /(^|[^a-z])production live execution(?!\.)/i,
+  /\bproduction live execution\b/i,
+  /\blive production execution\b/i,
+  /\bproduction execution enabled\b/i,
+  /\benables production live execution\b/i,
+  /\bsupports production live execution\b/i,
+  /\bready for production live execution\b/i,
   /(^|[^a-z])automatic purchase/i,
   /(^|[^a-z])instant provisioning/i,
   /(^|[^a-z])compliance certified/i,
@@ -90,16 +117,100 @@ const unsafeClaimPatterns = [
   /(^|[^a-z])payment connected(?!\.)/i,
   /(^|[^a-z])auth connected(?!\.)/i
 ];
-const allowedNegatedClaims = [
-  'does not mean production live execution',
-  'does not mean payment provider connected',
-  'does not mean auth provider connected',
-  'does not mean enterprise compliance certification',
-  'does not mean ROI guarantee'
+const allowedSafeClaimPatterns = [
+  /\bdoes not enable production live execution\b/gi,
+  /\bdoes not mean production live execution\b/gi,
+  /\bno production live execution(?: is enabled)?\b/gi,
+  /\bproduction live execution remains blocked\b/gi,
+  /\bproduction live execution is not enabled\b/gi,
+  /\bproduction live execution is out of scope\b/gi,
+  /\bnot production live execution\b/gi,
+  /\bdoes not mean payment provider connected\b/gi,
+  /\bdoes not mean auth provider connected\b/gi,
+  /\bdoes not mean enterprise compliance certification\b/gi,
+  /\bdoes not mean ROI guarantee\b/gi
 ];
-let claimScanText = docs;
-for (const allowed of allowedNegatedClaims) claimScanText = claimScanText.replaceAll(allowed, '');
-for (const pattern of unsafeClaimPatterns) if (pattern.test(claimScanText)) fail(`forbidden claim phrase found: ${pattern}`);
+function stripAllowedSafeClaims(text) {
+  let next = text;
+  for (const pattern of allowedSafeClaimPatterns) next = next.replace(pattern, '');
+  return next;
+}
+function assertNoForbiddenClaims(text, report = fail) {
+  const claimScanText = stripAllowedSafeClaims(text);
+  for (const pattern of unsafeClaimPatterns) if (pattern.test(claimScanText)) report(`forbidden claim phrase found: ${pattern}`);
+}
+assertNoForbiddenClaims(docs);
+
+function makeEvidenceItem(id, area, status = 'verified') {
+  return {
+    id,
+    area,
+    name: `${id} regression fixture`,
+    repo: area.toLowerCase(),
+    expectedArtifact: 'regression fixture expected artifact',
+    observedArtifact: 'regression fixture observed artifact',
+    prOrMergeCommit: 'regression-fixture',
+    validationCommand: 'regression-fixture',
+    status,
+    notes: 'regression fixture',
+    blocker: status === 'verified' ? '' : 'regression fixture blocker'
+  };
+}
+
+function runRegressionSelfChecks() {
+  const baseFreezeReadyManifest = {
+    status: 'freeze_ready',
+    pendingExternalEvidence: [],
+    requiredEvidence: [
+      ...['W01', 'W02', 'W03', 'W04', 'W05'].map((id) => makeEvidenceItem(id, 'WEB')),
+      ...['B01', 'B02', 'B03', 'B04', 'B05'].map((id) => makeEvidenceItem(id, 'RUNTIME')),
+      makeEvidenceItem('L01', 'LAUNCHER'),
+      ...['X01', 'X02', 'X03', 'X04', 'X05', 'X06', 'X07'].map((id) => makeEvidenceItem(id, 'CROSS-REPO'))
+    ]
+  };
+  const expectFreezeReadyFailure = (id, status) => {
+    const fixture = JSON.parse(JSON.stringify(baseFreezeReadyManifest));
+    const item = fixture.requiredEvidence.find((candidate) => candidate.id === id);
+    item.status = status;
+    const localErrors = [];
+    assertFreezeReadyEvidenceComplete(fixture, (message) => localErrors.push(message));
+    if (!localErrors.some((message) => message.includes(id) && message.includes(`status=${status}`))) {
+      fail(`freeze_ready regression fixture did not fail for ${id} status=${status}`);
+    }
+  };
+  for (const [id, status] of [
+    ['W01', 'pending_external_evidence'],
+    ['X01', 'pending_external_evidence'],
+    ['X02', 'pending'],
+    ['X05', 'pending_external_evidence'],
+    ['X07', 'pending_external_evidence']
+  ]) {
+    expectFreezeReadyFailure(id, status);
+  }
+  const passingErrors = [];
+  assertFreezeReadyEvidenceComplete(baseFreezeReadyManifest, (message) => passingErrors.push(message));
+  if (passingErrors.length > 0) fail(`freeze_ready verified regression fixture failed unexpectedly: ${passingErrors.join('; ')}`);
+
+  for (const claim of [
+    'This enables production live execution.',
+    'This enables production live execution',
+    'This supports production live execution.'
+  ]) {
+    const localErrors = [];
+    assertNoForbiddenClaims(claim, (message) => localErrors.push(message));
+    if (!localErrors.length) fail(`unsafe claim regression fixture did not fail: ${claim}`);
+  }
+  for (const claim of [
+    'This does not enable production live execution.',
+    'No production live execution is enabled.',
+    'Production live execution remains blocked.'
+  ]) {
+    const localErrors = [];
+    assertNoForbiddenClaims(claim, (message) => localErrors.push(message));
+    if (localErrors.length) fail(`safe claim regression fixture failed unexpectedly: ${claim}`);
+  }
+}
+runRegressionSelfChecks();
 
 const secretPatterns = [
   /sk_live_[A-Za-z0-9_]+/i,
