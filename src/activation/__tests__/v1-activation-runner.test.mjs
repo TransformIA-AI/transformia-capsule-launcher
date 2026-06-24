@@ -84,6 +84,21 @@ function runActivationCli(script, args = []) {
   return JSON.parse(result.stdout);
 }
 
+function runActivationCliFailure(script, args = [], expectedErrorCode) {
+  const result = spawnSync(process.execPath, [script, ...args], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.equal(result.stdout, '');
+  const error = JSON.parse(result.stderr);
+  assert.equal(error.status, 'blocked_cli_arguments');
+  assert.equal(error.errorCode, expectedErrorCode);
+  assert.equal(error.publicSafe, true);
+  assert.doesNotMatch(result.stderr, /valid_public_safe_activation_pack/);
+  return error;
+}
+
 function testPaymentValue(prefixParts) {
   return `${prefixParts.join('_')}_${'a'.repeat(16)}`;
 }
@@ -737,6 +752,64 @@ test('doctor reports safe status for fixture and required repo structure', () =>
   assert.ok(report.checks.some((check) => check.checkId === 'no_runtime_execution_enabled' && check.status === 'passed'));
 });
 
+test('capsule activation CLIs reject missing --pack without fixture fallback', () => {
+  for (const script of [
+    'scripts/capsule-activation-validate.mjs',
+    'scripts/capsule-activation-doctor.mjs'
+  ]) {
+    runActivationCliFailure(script, ['--pack'], 'missing_cli_value:pack');
+  }
+
+  for (const script of [
+    'scripts/capsule-activation-dry-run.mjs',
+    'scripts/capsule-activation-evidence.mjs'
+  ]) {
+    const out = tempOutputDir();
+    try {
+      runActivationCliFailure(script, ['--pack', '--output', out], 'invalid_cli_value:pack');
+      assertNoPartialFiles(out);
+    } finally {
+      cleanup(out);
+    }
+  }
+});
+
+test('capsule activation CLIs reject flag-shaped --pack values', () => {
+  runActivationCliFailure('scripts/capsule-activation-validate.mjs', ['--pack', '--output', 'ignored_public_path'], 'invalid_cli_value:pack');
+});
+
+test('capsule activation CLIs reject missing --output values', () => {
+  for (const script of [
+    'scripts/capsule-activation-dry-run.mjs',
+    'scripts/capsule-activation-evidence.mjs'
+  ]) {
+    runActivationCliFailure(script, ['--output'], 'missing_cli_value:output');
+    runActivationCliFailure(script, ['--output', '--pack'], 'invalid_cli_value:output');
+  }
+});
+
+test('capsule activation CLIs keep fixture fallback only when --pack is absent', () => {
+  const validationReport = runActivationCli('scripts/capsule-activation-validate.mjs');
+  assert.equal(validationReport.ok, true);
+  assert.equal(validationReport.status, 'valid_public_safe_activation_pack');
+
+  const doctorReport = runActivationCli('scripts/capsule-activation-doctor.mjs');
+  assert.equal(doctorReport.status, 'passed');
+});
+
+test('capsule activation validate accepts a valid --pack path', () => {
+  const out = tempOutputDir();
+  const packPath = join(out, 'activation-pack.public.json');
+  try {
+    writeFileSync(packPath, publicJson(capsuleV1ActivationPackFixture), 'utf8');
+    const validationReport = runActivationCli('scripts/capsule-activation-validate.mjs', ['--pack', packPath]);
+    assert.equal(validationReport.ok, true);
+    assert.equal(validationReport.status, 'valid_public_safe_activation_pack');
+  } finally {
+    cleanup(out);
+  }
+});
+
 test('console handoff blocks readiness when doctor has not run', () => {
   const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture);
   const serialized = JSON.stringify(handoff);
@@ -1377,6 +1450,60 @@ test('writeActivationRunnerFiles blocks preexisting symlink path segments under 
   } finally {
     cleanup(out);
     cleanup(external);
+  }
+});
+
+test('writeActivationRunnerFiles rejects symlinked output roots without external writes', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const base = tempOutputDir();
+  const external = tempOutputDir();
+  const rootLink = join(base, 'activation-root-link');
+  try {
+    try {
+      symlinkSync(external, rootLink, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      return;
+    }
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': files['README_ACTIVATION_RUNNER.md'],
+      'workspace/status/doctor-status.public.json': files['workspace/status/doctor-status.public.json']
+    }, rootLink), (error) => {
+      assert.match(error.message, /blocked_output_root_symlink/);
+      assert.doesNotMatch(error.message, escapedPattern(external));
+      return true;
+    });
+    assert.deepEqual(readdirSync(external), []);
+  } finally {
+    cleanup(base);
+    cleanup(external);
+  }
+});
+
+test('writeActivationRunnerFiles creates missing output roots and writes normally', () => {
+  const base = tempOutputDir();
+  const out = join(base, 'created-output-root');
+  try {
+    const written = writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n'
+    }, out);
+    assert.equal(written.length, 1);
+    assert.equal(readFileSync(join(out, 'README_ACTIVATION_RUNNER.md'), 'utf8'), 'Public-safe local activation output.\n');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('writeActivationRunnerFiles rejects regular files as output roots', () => {
+  const base = tempOutputDir();
+  const out = join(base, 'not_a_directory');
+  try {
+    writeFileSync(out, 'public-safe placeholder\n', 'utf8');
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n'
+    }, out), /output_root_must_be_directory/);
+    assert.equal(readFileSync(out, 'utf8'), 'public-safe placeholder\n');
+  } finally {
+    cleanup(base);
   }
 });
 

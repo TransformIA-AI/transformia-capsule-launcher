@@ -965,6 +965,15 @@ function assertNoFinalSymlinkTarget(target) {
   }
 }
 
+function assertSafeOutputRoot(root) {
+  if (!existsSync(root)) {
+    mkdirSync(root, { recursive: true });
+  }
+  const outputRootStat = lstatSync(root);
+  if (outputRootStat.isSymbolicLink()) throw new Error('blocked_output_root_symlink');
+  if (!outputRootStat.isDirectory()) throw new Error('output_root_must_be_directory');
+}
+
 function buildPreflightedWriteTargets(root, validatedFiles) {
   return Object.entries(validatedFiles).map(([filename, content]) => {
     if (filename.includes('..')) throw new Error('unexpected_activation_runner_filename');
@@ -1636,7 +1645,7 @@ export function writeActivationRunnerFiles(files, outputRoot) {
   const root = resolve(outputRoot);
   const validatedFiles = validateActivationRunnerWritableFileMap(files, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'writeActivationRunnerFiles', root);
   const written = [];
-  mkdirSync(root, { recursive: true });
+  assertSafeOutputRoot(root);
   const writeTargets = buildPreflightedWriteTargets(root, validatedFiles);
   for (const { content, target } of writeTargets) {
     mkdirSync(dirname(target), { recursive: true });

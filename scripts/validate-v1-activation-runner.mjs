@@ -33,6 +33,19 @@ const exists = (path) => existsSync(join(root, path));
 const read = (path) => readFileSync(join(root, path), 'utf8');
 const normalize = (path) => path.replaceAll('\\', '/');
 
+function runCliFailureSelfCheck(script, args, expectedErrorCode) {
+  const result = spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: 'utf8' });
+  if (result.status === 0) fail(`${script} accepted malformed CLI args: ${args.join(' ')}`);
+  if (result.stdout !== '') fail(`${script} printed fixture output for malformed CLI args`);
+  try {
+    const error = JSON.parse(result.stderr);
+    if (error.errorCode !== expectedErrorCode) fail(`${script} reported ${error.errorCode} instead of ${expectedErrorCode}`);
+    if (error.publicSafe !== true) fail(`${script} malformed CLI error must be publicSafe`);
+  } catch {
+    fail(`${script} malformed CLI error must be public-safe JSON`);
+  }
+}
+
 const requiredDocs = [
   'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_ACTIVATION_RUNNER_HANDOFF.md',
   'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_CONTRACT_MATRIX.md',
@@ -124,9 +137,12 @@ for (const phrase of [
   'cross_file_doctor_status_mismatch',
   'cross_file_handoff_summary_mismatch',
   'assertNoSymlinkPathSegments',
+  'assertSafeOutputRoot',
   'assertNoFinalSymlinkTarget',
   'buildPreflightedWriteTargets',
   'blocked_symlink_path_segment',
+  'blocked_output_root_symlink',
+  'output_root_must_be_directory',
   'blocked_final_symlink_target',
   'blocked_dry_run_step_claim_field',
   'collectBlockedEvidenceReadyClaimIssues',
@@ -172,10 +188,24 @@ if (!source.includes("'activation-pack.public.json': publicJsonOutput('activatio
 }
 const dryRunCliSource = exists('scripts/capsule-activation-dry-run.mjs') ? read('scripts/capsule-activation-dry-run.mjs') : '';
 const evidenceCliSource = exists('scripts/capsule-activation-evidence.mjs') ? read('scripts/capsule-activation-evidence.mjs') : '';
+const validateCliSource = exists('scripts/capsule-activation-validate.mjs') ? read('scripts/capsule-activation-validate.mjs') : '';
+const doctorCliSource = exists('scripts/capsule-activation-doctor.mjs') ? read('scripts/capsule-activation-doctor.mjs') : '';
+for (const [label, cliSource] of [
+  ['validate CLI', validateCliSource],
+  ['doctor CLI', doctorCliSource],
+  ['dry-run CLI', dryRunCliSource],
+  ['evidence CLI', evidenceCliSource]
+]) {
+  if (!cliSource.includes('blocked_cli_arguments')) fail(`${label} must fail closed on malformed CLI arguments`);
+  if (!cliSource.includes('missing_cli_value')) fail(`${label} must report missing CLI values with stable codes`);
+  if (!cliSource.includes('invalid_cli_value')) fail(`${label} must report flag-shaped CLI values with stable codes`);
+  if (!cliSource.includes("argValue('--pack', 'pack')")) fail(`${label} must parse --pack with a strict value helper`);
+}
 for (const [label, cliSource] of [
   ['dry-run CLI', dryRunCliSource],
   ['evidence CLI', evidenceCliSource]
 ]) {
+  if (!cliSource.includes("argValue('--output', 'output')")) fail(`${label} must parse --output with a strict value helper`);
   if (!cliSource.includes('buildPublicOutputRootSummary(outputRoot)')) fail(`${label} must summarize outputRoot without echoing raw values`);
   if (!cliSource.includes('assertPublicSafeOutput({')) fail(`${label} must pass JSON summary through assertPublicSafeOutput`);
   if (/(^|\n)\s*outputRoot\s*,/.test(cliSource) || /\boutputRoot\s*:/.test(cliSource)) fail(`${label} must not print raw outputRoot in its JSON summary`);
@@ -219,11 +249,23 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects cross-file doctor status mismatches',
   'writeActivationRunnerFiles rejects evidence and handoff summary mismatches',
   'writeActivationRunnerFiles blocks preexisting symlink path segments under output root',
+  'writeActivationRunnerFiles rejects symlinked output roots without external writes',
+  'writeActivationRunnerFiles creates missing output roots and writes normally',
+  'writeActivationRunnerFiles rejects regular files as output roots',
   'writeActivationRunnerFiles blocks final symlink targets without touching external files',
   'writeActivationRunnerFiles writes no partial files when a later final target is a symlink',
   'writeActivationRunnerFiles overwrites existing regular files inside output root',
   'external file must not change',
   'later symlink victim must not change',
+  'capsule activation CLIs reject missing --pack without fixture fallback',
+  'capsule activation CLIs reject flag-shaped --pack values',
+  'capsule activation CLIs reject missing --output values',
+  'capsule activation CLIs keep fixture fallback only when --pack is absent',
+  'capsule activation validate accepts a valid --pack path',
+  'missing_cli_value:pack',
+  'invalid_cli_value:pack',
+  'missing_cli_value:output',
+  'invalid_cli_value:output',
   'evidence readiness is blocked when doctor status is blocked for an incomplete root',
   'console handoff blocks readiness when doctor has not run',
   'console handoff blocks readiness when doctor is blocked',
@@ -252,6 +294,8 @@ for (const phrase of [
   'alias_mismatch',
   'cross_file_doctor_status_mismatch',
   'blocked_symlink_path_segment',
+  'blocked_output_root_symlink',
+  'output_root_must_be_directory',
   'blocked_final_symlink_target',
   'noLiveExecution: false',
   'runtimeAuthorityRequired: false',
@@ -265,6 +309,36 @@ if (!activationRunnerTestSource.includes('assert.doesNotMatch(error.message, esc
 }
 if (!activationRunnerTestSource.includes('assertNoPartialFiles(out)')) {
   fail('activation runner tests must verify no partial writes for blocked digit-only phone values');
+}
+
+runCliFailureSelfCheck('scripts/capsule-activation-validate.mjs', ['--pack'], 'missing_cli_value:pack');
+runCliFailureSelfCheck('scripts/capsule-activation-doctor.mjs', ['--pack'], 'missing_cli_value:pack');
+runCliFailureSelfCheck('scripts/capsule-activation-validate.mjs', ['--pack', '--output', 'ignored_public_path'], 'invalid_cli_value:pack');
+for (const script of ['scripts/capsule-activation-dry-run.mjs', 'scripts/capsule-activation-evidence.mjs']) {
+  const malformedOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-cli-'));
+  try {
+    runCliFailureSelfCheck(script, ['--pack', '--output', malformedOut], 'invalid_cli_value:pack');
+    if (readdirSync(malformedOut).length !== 0) fail(`${script} wrote files for malformed --pack`);
+  } finally {
+    rmSync(malformedOut, { recursive: true, force: true });
+  }
+  runCliFailureSelfCheck(script, ['--output'], 'missing_cli_value:output');
+  runCliFailureSelfCheck(script, ['--output', '--pack'], 'invalid_cli_value:output');
+}
+const noPackValidation = spawnSync(process.execPath, ['scripts/capsule-activation-validate.mjs'], { cwd: root, encoding: 'utf8' });
+if (noPackValidation.status !== 0) fail('validate CLI without --pack must still use fixture and pass');
+else {
+  const report = JSON.parse(noPackValidation.stdout);
+  if (report.status !== 'valid_public_safe_activation_pack') fail('validate CLI without --pack did not use valid fixture');
+}
+const validPackSelfCheckRoot = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-cli-pack-'));
+try {
+  const packPath = join(validPackSelfCheckRoot, 'activation-pack.public.json');
+  writeFileSync(packPath, `${JSON.stringify(buildDefaultV1ActivationPack(), null, 2)}\n`, 'utf8');
+  const result = spawnSync(process.execPath, ['scripts/capsule-activation-validate.mjs', '--pack', packPath], { cwd: root, encoding: 'utf8' });
+  if (result.status !== 0) fail('validate CLI rejected a valid --pack path');
+} finally {
+  rmSync(validPackSelfCheckRoot, { recursive: true, force: true });
 }
 
 const docs = requiredDocs.filter(exists).map(read).join('\n');
@@ -290,7 +364,7 @@ for (const heading of ['Summary', 'What changed', 'Commands/scripts added', 'Saf
   if (!prBody.includes(`## ${heading}`)) fail(`PR body missing section: ${heading}`);
 }
 if (!prBody.includes('## Exact Atlas Entry / Dani Approval')) fail('PR body must include Exact Atlas Entry / Dani Approval section');
-for (const staleCount of ['26 tests', '42 tests']) {
+for (const staleCount of ['26 tests', '42 tests', '78 tests', '86 tests', '89 tests']) {
   if (prBody.includes(staleCount)) fail(`PR body contains stale ${staleCount} count`);
 }
 if (!prBody.includes('npm run -s test') || !/`npm run -s test`\s+passed/i.test(prBody)) {
@@ -1161,6 +1235,48 @@ try {
 } finally {
   rmSync(partialSymlinkOut, { recursive: true, force: true });
   rmSync(partialSymlinkTarget, { recursive: true, force: true });
+}
+const outputRootSymlinkBase = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-root-symlink-'));
+const outputRootSymlinkTarget = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-root-symlink-target-'));
+const outputRootLink = join(outputRootSymlinkBase, 'activation-output');
+let outputRootSymlinkCreated = false;
+try {
+  try {
+    symlinkSync(outputRootSymlinkTarget, outputRootLink, process.platform === 'win32' ? 'junction' : 'dir');
+    outputRootSymlinkCreated = true;
+  } catch {
+    outputRootSymlinkCreated = false;
+  }
+  if (outputRootSymlinkCreated) {
+    try {
+      writeActivationRunnerFiles({
+        'README_ACTIVATION_RUNNER.md': writableFiles['README_ACTIVATION_RUNNER.md']
+      }, outputRootLink);
+      fail('writeActivationRunnerFiles accepted a symlinked output root');
+    } catch (error) {
+      if (!/blocked_output_root_symlink/.test(error.message)) fail(`output root symlink guard reported unexpected error: ${error.message}`);
+      if (error.message.includes(outputRootSymlinkTarget)) fail('output root symlink guard leaked raw external path');
+    }
+    if (readdirSync(outputRootSymlinkTarget).length !== 0) fail('output root symlink guard wrote through external root');
+  }
+} finally {
+  rmSync(outputRootSymlinkBase, { recursive: true, force: true });
+  rmSync(outputRootSymlinkTarget, { recursive: true, force: true });
+}
+const regularFileRoot = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-file-root-'));
+const regularFileRootPath = join(regularFileRoot, 'not_a_directory');
+try {
+  writeFileSync(regularFileRootPath, 'public-safe placeholder\n', 'utf8');
+  try {
+    writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': writableFiles['README_ACTIVATION_RUNNER.md']
+    }, regularFileRootPath);
+    fail('writeActivationRunnerFiles accepted a regular file as output root');
+  } catch (error) {
+    if (!/output_root_must_be_directory/.test(error.message)) fail(`regular file output root guard reported unexpected error: ${error.message}`);
+  }
+} finally {
+  rmSync(regularFileRoot, { recursive: true, force: true });
 }
 const originalCwd = process.cwd();
 const nonRepoCwd = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-root-'));
