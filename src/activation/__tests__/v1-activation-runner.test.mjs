@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -1217,6 +1217,166 @@ test('writeActivationRunnerFiles writes builder-produced evidence JSON through c
     } finally {
       cleanup(out);
     }
+  }
+});
+
+test('writeActivationRunnerFiles accepts blocked not-run console handoff without ready claims', () => {
+  const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture);
+  const out = tempOutputDir();
+  try {
+    const written = writeActivationRunnerFiles({
+      'console-handoff-summary.public.json': publicJson(handoff)
+    }, out);
+    assert.equal(written.length, 1);
+    assert.equal(JSON.parse(readFileSync(join(out, 'console-handoff-summary.public.json'), 'utf8')).doctorStatus, 'not_run');
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects handoff readiness that contradicts doctor status', () => {
+  for (const filename of [
+    'console-handoff-summary.public.json',
+    'workspace/handoff/console-handoff-summary.public.json'
+  ]) {
+    for (const doctorStatus of ['blocked', 'not_run']) {
+      const handoff = builderPublicJsonObject('console-handoff-summary.public.json');
+      handoff.doctorStatus = doctorStatus;
+      assertPublicJsonWriteBlocked(
+        filename,
+        handoff,
+        /handoff_ready_mismatch/
+      );
+    }
+  }
+});
+
+test('writeActivationRunnerFiles rejects handoff lastDryRunSummary readiness mismatches', () => {
+  const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture);
+  handoff.lastDryRunSummary.status = 'dry_run_ready_no_live_execution';
+  assertPublicJsonWriteBlocked(
+    'console-handoff-summary.public.json',
+    handoff,
+    /handoff_last_dry_run_status_mismatch/
+  );
+});
+
+test('writeActivationRunnerFiles rejects inconsistent doctor report semantics', () => {
+  const passedWithBlockedCheck = builderPublicJsonObject('doctor-report.public.json');
+  passedWithBlockedCheck.checks[0].status = 'blocked';
+  passedWithBlockedCheck.checks[0].reasonCodes = ['activation_pack_validation_required'];
+  passedWithBlockedCheck.blockedReasonCodes = ['activation_pack_validation_required'];
+  assertPublicJsonWriteBlocked(
+    'doctor-report.public.json',
+    passedWithBlockedCheck,
+    /doctor_report_passed_with_blocked_checks/
+  );
+
+  const blockedWithoutEvidence = builderPublicJsonObject('doctor-report.public.json');
+  blockedWithoutEvidence.status = 'blocked';
+  blockedWithoutEvidence.blockedReasonCodes = [];
+  assertPublicJsonWriteBlocked(
+    'doctor-report.public.json',
+    blockedWithoutEvidence,
+    /doctor_report_blocked_without_evidence/
+  );
+
+  const unsafeCheckShape = builderPublicJsonObject('doctor-report.public.json');
+  unsafeCheckShape.checks[0].publicSafe = false;
+  assertPublicJsonWriteBlocked(
+    'doctor-report.public.json',
+    unsafeCheckShape,
+    /doctor_report_check_public_safe_must_be_true:root\.checks\.0\.publicSafe/
+  );
+});
+
+test('writeActivationRunnerFiles rejects mismatched root and workspace alias JSON', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const workspaceDryRun = JSON.parse(files['workspace/plans/dry-run-plan.public.json']);
+  workspaceDryRun.status = 'dry_run_blocked_invalid_pack';
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'dry-run-plan.public.json': files['dry-run-plan.public.json'],
+      'workspace/plans/dry-run-plan.public.json': publicJson(workspaceDryRun)
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /alias_mismatch:dry-run-plan\.public\.json:workspace\/plans\/dry-run-plan\.public\.json/);
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects cross-file doctor status mismatches', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const doctorReport = JSON.parse(files['doctor-report.public.json']);
+  doctorReport.status = 'blocked';
+  doctorReport.checks = [{
+    checkId: 'repo_package_structure',
+    status: 'blocked',
+    reasonCodes: ['repo_structure_missing'],
+    details: {},
+    publicSafe: true
+  }];
+  doctorReport.blockedReasonCodes = ['repo_structure_missing'];
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'doctor-report.public.json': publicJson(doctorReport),
+      'workspace/status/doctor-status.public.json': files['workspace/status/doctor-status.public.json'],
+      'console-handoff-summary.public.json': files['console-handoff-summary.public.json']
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /cross_file_doctor_status_mismatch/);
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects evidence and handoff summary mismatches', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const handoff = JSON.parse(files['console-handoff-summary.public.json']);
+  handoff.publicReasonCodes = [...handoff.publicReasonCodes, 'operator_review_placeholder'];
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'activation-evidence-pack.public.json': files['activation-evidence-pack.public.json'],
+      'console-handoff-summary.public.json': publicJson(handoff)
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /cross_file_handoff_summary_mismatch/);
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles blocks preexisting symlink path segments under output root', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const out = tempOutputDir();
+  const external = tempOutputDir();
+  const link = join(out, 'workspace');
+  try {
+    try {
+      symlinkSync(external, link, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      return;
+    }
+    assert.throws(() => writeActivationRunnerFiles({
+      'workspace/status/doctor-status.public.json': files['workspace/status/doctor-status.public.json']
+    }, out), /blocked_symlink_path_segment|blocked_realpath_escape/);
+    assert.equal(existsSync(join(external, 'status', 'doctor-status.public.json')), false);
+  } finally {
+    cleanup(out);
+    cleanup(external);
   }
 });
 

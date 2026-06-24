@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export const V1_ACTIVATION_RUNNER_GENERATED_AT = '2026-06-24T00:00:00.000Z';
@@ -926,6 +926,39 @@ function assertInside(root, target) {
   }
 }
 
+function assertNoSymlinkPathSegments(root, target) {
+  const resolvedRoot = resolve(root);
+  const targetDir = dirname(resolve(target));
+  const rel = relative(resolvedRoot, targetDir);
+  if (!rel || rel === '.') return;
+  if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error('blocked_path_traversal');
+  }
+
+  let cursor = resolvedRoot;
+  for (const segment of rel.split(sep).filter(Boolean)) {
+    cursor = join(cursor, segment);
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new Error('blocked_symlink_path_segment');
+    }
+  }
+}
+
+function assertExistingRealpathInside(root, target) {
+  const realRoot = realpathSync.native(root);
+  let existingParent = dirname(resolve(target));
+  while (!existsSync(existingParent)) {
+    const parent = dirname(existingParent);
+    if (parent === existingParent) throw new Error('blocked_realpath_escape');
+    existingParent = parent;
+  }
+
+  const rel = relative(realRoot, realpathSync.native(existingParent));
+  if (rel.startsWith('..') || rel === '..' || isAbsolute(rel)) {
+    throw new Error('blocked_realpath_escape');
+  }
+}
+
 function safeWritableFileLabel(filename, allowedFiles) {
   return typeof filename === 'string' && allowedFiles.has(filename) ? filename : '<unexpected_file>';
 }
@@ -1029,6 +1062,12 @@ const CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES = new Map([
   ['workspace/evidence/activation-evidence-pack.public.json', 'activation-evidence-pack.public.json'],
   ['workspace/handoff/console-handoff-summary.public.json', 'console-handoff-summary.public.json']
 ]);
+
+const CANONICAL_PUBLIC_JSON_ALIAS_PAIRS = [
+  ['dry-run-plan.public.json', 'workspace/plans/dry-run-plan.public.json'],
+  ['activation-evidence-pack.public.json', 'workspace/evidence/activation-evidence-pack.public.json'],
+  ['console-handoff-summary.public.json', 'workspace/handoff/console-handoff-summary.public.json']
+];
 
 function canonicalPublicSchemaForFile(filename) {
   return CANONICAL_PUBLIC_JSON_FILE_SCHEMAS.get(CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES.get(filename) ?? filename);
@@ -1168,9 +1207,63 @@ function collectCanonicalDryRunPlanSchemaIssues(parsed, issues) {
   });
 }
 
+function requireReasonCode(reasonCodes, requiredCode, issues) {
+  if (!Array.isArray(reasonCodes)) {
+    addIssue(issues, 'handoff_reason_codes_must_be_array');
+    return;
+  }
+  if (!reasonCodes.includes(requiredCode)) addIssue(issues, `handoff_reason_codes_missing:${requiredCode}`);
+}
+
+function collectCanonicalConsoleHandoffReadinessIssues(parsed, issues) {
+  const doctorStatus = normalizeDoctorStatus(parsed.doctorStatus);
+  const launcherReady = parsed.launcherStatus === 'activation_prepared_for_review';
+  const dryRunReady = parsed.activationReadiness === 'dry_run_ready_no_live_execution';
+  const evidenceReady = parsed.evidencePackReady === true;
+  const hasReadyClaim = launcherReady || dryRunReady || evidenceReady;
+  const invalidPackBlocked = parsed.activationReadiness === 'blocked_invalid_activation_pack';
+
+  requireAllowedPublicValue(parsed.doctorStatus, ALLOWED_DOCTOR_STATUSES, 'root.doctorStatus', issues);
+  if (!isPlainObject(parsed.lastDryRunSummary)) {
+    addIssue(issues, 'handoff_last_dry_run_summary_must_be_object');
+    return;
+  }
+
+  if (doctorStatus !== 'passed' && hasReadyClaim) addIssue(issues, 'handoff_ready_mismatch');
+  if (doctorStatus === 'passed' && hasReadyClaim && (!launcherReady || !dryRunReady || !evidenceReady)) {
+    addIssue(issues, 'handoff_ready_mismatch');
+  }
+
+  if (doctorStatus === 'not_run' && !invalidPackBlocked) {
+    if (parsed.launcherStatus !== 'activation_blocked') addIssue(issues, 'handoff_not_run_mismatch');
+    if (parsed.activationReadiness !== 'blocked_doctor_not_run') addIssue(issues, 'handoff_not_run_mismatch');
+    if (parsed.evidencePackReady !== false) addIssue(issues, 'handoff_not_run_mismatch');
+    if (parsed.lastDryRunSummary.status !== 'blocked_doctor_not_run') addIssue(issues, 'handoff_last_dry_run_status_mismatch');
+    requireReasonCode(parsed.publicReasonCodes, 'doctor_not_run', issues);
+  }
+
+  if (doctorStatus === 'blocked' && !invalidPackBlocked) {
+    if (parsed.launcherStatus !== 'activation_blocked') addIssue(issues, 'handoff_blocked_mismatch');
+    if (parsed.activationReadiness !== 'blocked_doctor_not_passed') addIssue(issues, 'handoff_blocked_mismatch');
+    if (parsed.evidencePackReady !== false) addIssue(issues, 'handoff_blocked_mismatch');
+    if (parsed.localWorkspacePrepared !== false) addIssue(issues, 'handoff_blocked_mismatch');
+    if (parsed.lastDryRunSummary.status !== 'blocked_doctor_not_passed') addIssue(issues, 'handoff_last_dry_run_status_mismatch');
+    requireReasonCode(parsed.publicReasonCodes, 'doctor_not_passed', issues);
+  }
+
+  if (doctorStatus === 'passed') {
+    if (hasReadyClaim && parsed.lastDryRunSummary.status !== 'dry_run_ready_no_live_execution') {
+      addIssue(issues, 'handoff_last_dry_run_status_mismatch');
+    }
+    if (!hasReadyClaim && !invalidPackBlocked) addIssue(issues, 'handoff_passed_doctor_mismatch');
+    if (hasReadyClaim) requireReasonCode(parsed.publicReasonCodes, 'dry_run_ready_no_live_execution', issues);
+  }
+}
+
 function collectCanonicalConsoleHandoffSchemaIssues(parsed, issues) {
   requirePublicTrue(parsed.runtimeCommissioningRequired, 'root.runtimeCommissioningRequired', issues);
   requirePublicTrue(parsed.providerCommissioningRequired, 'root.providerCommissioningRequired', issues);
+  collectCanonicalConsoleHandoffReadinessIssues(parsed, issues);
   if (Object.hasOwn(parsed, 'boundaries')) {
     if (!isPlainObject(parsed.boundaries)) {
       addIssue(issues, 'console_handoff_boundaries_must_be_object');
@@ -1190,6 +1283,49 @@ function collectCanonicalConsoleHandoffSchemaIssues(parsed, issues) {
   }
 }
 
+const DOCTOR_REPORT_CHECK_ALLOWED_KEYS = new Set(['checkId', 'status', 'reasonCodes', 'details', 'publicSafe']);
+
+function collectCanonicalDoctorReportSchemaIssues(parsed, issues) {
+  requireAllowedPublicValue(parsed.status, ALLOWED_DOCTOR_STATUSES, 'root.status', issues);
+  if (!Array.isArray(parsed.checks)) {
+    addIssue(issues, 'doctor_report_checks_must_be_array');
+    return;
+  }
+  if (!Array.isArray(parsed.blockedReasonCodes)) addIssue(issues, 'doctor_report_blocked_reason_codes_must_be_array');
+
+  let blockedCheckCount = 0;
+  parsed.checks.forEach((check, index) => {
+    const path = `root.checks.${index}`;
+    if (!isPlainObject(check)) {
+      addIssue(issues, `doctor_report_check_must_be_object:${path}`);
+      return;
+    }
+    for (const key of Object.keys(check)) {
+      if (!DOCTOR_REPORT_CHECK_ALLOWED_KEYS.has(key)) {
+        addIssue(issues, `blocked_doctor_report_check_field:${safePathForKey(path, key, isUnsafePublicKeyName(key))}`);
+      }
+    }
+    if (typeof check.checkId !== 'string' || !SAFE_REF.test(check.checkId)) addIssue(issues, `doctor_report_check_id_invalid:${path}.checkId`);
+    requireAllowedPublicValue(check.status, ALLOWED_DOCTOR_STATUSES, `${path}.status`, issues);
+    if (!Array.isArray(check.reasonCodes)) addIssue(issues, `doctor_report_check_reason_codes_must_be_array:${path}.reasonCodes`);
+    if (check.publicSafe !== true) addIssue(issues, `doctor_report_check_public_safe_must_be_true:${path}.publicSafe`);
+    if (Object.hasOwn(check, 'details') && !isPlainObject(check.details)) addIssue(issues, `doctor_report_check_details_must_be_object:${path}.details`);
+    if (check.status === 'blocked') blockedCheckCount += 1;
+  });
+
+  const blockedReasonCount = Array.isArray(parsed.blockedReasonCodes) ? parsed.blockedReasonCodes.length : 0;
+  if (parsed.status === 'passed') {
+    if (blockedCheckCount > 0) addIssue(issues, 'doctor_report_passed_with_blocked_checks');
+    if (blockedReasonCount > 0) addIssue(issues, 'doctor_report_passed_with_blocked_reasons');
+    if (parsed.checks.some((check) => isPlainObject(check) && check.status !== 'passed')) {
+      addIssue(issues, 'doctor_report_passed_with_nonpassed_checks');
+    }
+  }
+  if (parsed.status === 'blocked' && blockedCheckCount === 0 && blockedReasonCount === 0) {
+    addIssue(issues, 'doctor_report_blocked_without_evidence');
+  }
+}
+
 function collectCanonicalWorkspaceConfigSchemaIssues(parsed, issues) {
   requireAllowedPublicValue(parsed.runtimeMode, new Set(['runtime_authority_required']), 'root.runtimeMode', issues);
   for (const field of ['providerConnection', 'outboundMessaging', 'calendarBooking', 'paymentCapture', 'provisioning']) {
@@ -1203,6 +1339,9 @@ function collectCanonicalDoctorStatusSchemaIssues(parsed, issues) {
 
 function collectCanonicalPublicSemanticIssues(filename, parsed, issues) {
   switch (canonicalPublicFileName(filename)) {
+    case 'doctor-report.public.json':
+      collectCanonicalDoctorReportSchemaIssues(parsed, issues);
+      break;
     case 'activation-evidence-pack.public.json':
       collectCanonicalEvidenceSchemaIssues(parsed, issues);
       break;
@@ -1240,6 +1379,91 @@ function validateCanonicalPublicFileObject(filename, parsed) {
   return issues;
 }
 
+function collectCrossFileActivationPackIdIssues(parsedFiles, issues) {
+  const carriers = [
+    'activation-pack.public.json',
+    'dry-run-plan.public.json',
+    'workspace/plans/dry-run-plan.public.json',
+    'activation-evidence-pack.public.json',
+    'workspace/evidence/activation-evidence-pack.public.json',
+    'local-workspace-skeleton.public.json',
+    'workspace/config/launcher.config.public.json',
+    'workspace/status/activation-status.public.json'
+  ];
+  const expected = carriers
+    .map((filename) => parsedFiles.get(filename)?.activationPackId)
+    .find((activationPackId) => typeof activationPackId === 'string');
+  if (typeof expected !== 'string') return;
+  for (const filename of carriers) {
+    const parsed = parsedFiles.get(filename);
+    if (parsed && parsed.activationPackId !== expected) addIssue(issues, `cross_file_activation_pack_id_mismatch:${filename}`);
+  }
+}
+
+function collectCrossFileDoctorStatusIssues(parsedFiles, issues) {
+  const doctorReport = parsedFiles.get('doctor-report.public.json');
+  const expectedStatus = doctorReport?.status;
+  if (typeof expectedStatus !== 'string') return;
+
+  const doctorStatus = parsedFiles.get('workspace/status/doctor-status.public.json');
+  if (doctorStatus) {
+    if (doctorStatus.status !== expectedStatus) addIssue(issues, 'cross_file_doctor_status_mismatch:workspace/status/doctor-status.public.json');
+    if (doctorStatus.doctorReportId !== doctorReport.doctorReportId) addIssue(issues, 'cross_file_doctor_report_id_mismatch:workspace/status/doctor-status.public.json');
+  }
+
+  for (const filename of ['console-handoff-summary.public.json', 'workspace/handoff/console-handoff-summary.public.json']) {
+    const handoff = parsedFiles.get(filename);
+    if (handoff && handoff.doctorStatus !== expectedStatus) addIssue(issues, `cross_file_doctor_status_mismatch:${filename}`);
+  }
+
+  for (const filename of ['activation-evidence-pack.public.json', 'workspace/evidence/activation-evidence-pack.public.json']) {
+    const evidence = parsedFiles.get(filename);
+    if (!evidence) continue;
+    if (evidence.doctorStatus !== expectedStatus) addIssue(issues, `cross_file_doctor_status_mismatch:${filename}`);
+    if (evidence.consoleHandoffSummary?.doctorStatus !== expectedStatus) addIssue(issues, `cross_file_doctor_status_mismatch:${filename}.consoleHandoffSummary`);
+    if (evidence.launcherStatusSummary?.doctorStatus !== expectedStatus) addIssue(issues, `cross_file_doctor_status_mismatch:${filename}.launcherStatusSummary`);
+  }
+}
+
+function collectCrossFileHandoffSummaryIssues(parsedFiles, issues) {
+  const rootHandoff = parsedFiles.get('console-handoff-summary.public.json') ?? parsedFiles.get('workspace/handoff/console-handoff-summary.public.json');
+  const handoffFilename = parsedFiles.has('console-handoff-summary.public.json')
+    ? 'console-handoff-summary.public.json'
+    : 'workspace/handoff/console-handoff-summary.public.json';
+  for (const evidenceFilename of ['activation-evidence-pack.public.json', 'workspace/evidence/activation-evidence-pack.public.json']) {
+    const evidence = parsedFiles.get(evidenceFilename);
+    if (!evidence || !rootHandoff || !isPlainObject(evidence.consoleHandoffSummary)) continue;
+    if (computeActivationRunnerDigest(evidence.consoleHandoffSummary) !== computeActivationRunnerDigest(rootHandoff)) {
+      addIssue(issues, `cross_file_handoff_summary_mismatch:${evidenceFilename}:${handoffFilename}`);
+    }
+    for (const field of [
+      'launcherStatus',
+      'activationReadiness',
+      'evidencePackReady',
+      'localWorkspacePrepared',
+      'runtimeCommissioningRequired',
+      'providerCommissioningRequired'
+    ]) {
+      if (isPlainObject(evidence.launcherStatusSummary) && evidence.launcherStatusSummary[field] !== rootHandoff[field]) {
+        addIssue(issues, `cross_file_evidence_handoff_mismatch:${evidenceFilename}:${field}`);
+      }
+    }
+  }
+}
+
+function collectCanonicalFileMapConsistencyIssues(parsedFiles, issues) {
+  for (const [rootFilename, aliasFilename] of CANONICAL_PUBLIC_JSON_ALIAS_PAIRS) {
+    const rootFile = parsedFiles.get(rootFilename);
+    const aliasFile = parsedFiles.get(aliasFilename);
+    if (rootFile && aliasFile && computeActivationRunnerDigest(rootFile) !== computeActivationRunnerDigest(aliasFile)) {
+      addIssue(issues, `alias_mismatch:${rootFilename}:${aliasFilename}`);
+    }
+  }
+  collectCrossFileActivationPackIdIssues(parsedFiles, issues);
+  collectCrossFileDoctorStatusIssues(parsedFiles, issues);
+  collectCrossFileHandoffSummaryIssues(parsedFiles, issues);
+}
+
 export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1_ACTIVATION_RUNNER_WRITABLE_FILES, context = 'activation_runner_files', outputRoot = undefined) {
   const expected = allowedFiles instanceof Set ? allowedFiles : new Set(allowedFiles);
   if (!files || typeof files !== 'object' || Array.isArray(files)) {
@@ -1248,6 +1472,7 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
 
   const issues = [];
   const validatedEntries = [];
+  const parsedJsonFiles = new Map();
   const root = outputRoot ? resolve(outputRoot) : undefined;
   for (const [filename, content] of Object.entries(files)) {
     const label = safeWritableFileLabel(filename, expected);
@@ -1292,6 +1517,7 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
       }).map((issue) => `blocked_file_content:${context}:${label}:${issue}`));
       issues.push(...validateCanonicalPublicFileObject(label, parsed)
         .map((issue) => `blocked_public_file_schema:${context}:${label}:${issue}`));
+      parsedJsonFiles.set(filename, parsed);
       validatedEntries.push([filename, content]);
       continue;
     }
@@ -1305,6 +1531,10 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
 
     issues.push(`blocked_file_map:${context}:${label}:unsupported_file_type`);
   }
+
+  const consistencyIssues = [];
+  collectCanonicalFileMapConsistencyIssues(parsedJsonFiles, consistencyIssues);
+  issues.push(...consistencyIssues.map((issue) => `blocked_public_file_consistency:${context}:${issue}`));
 
   if (issues.length) throw new ActivationRunnerWriteBlockedError(issues);
   return Object.fromEntries(validatedEntries);
@@ -1393,6 +1623,8 @@ export function writeActivationRunnerFiles(files, outputRoot) {
     if (filename.includes('..')) throw new Error('unexpected_activation_runner_filename');
     const target = resolve(join(root, filename));
     assertInside(root, target);
+    assertNoSymlinkPathSegments(root, target);
+    assertExistingRealpathInside(root, target);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, content, 'utf8');
     written.push(target);

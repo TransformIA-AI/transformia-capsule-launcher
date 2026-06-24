@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -113,6 +113,18 @@ for (const phrase of [
   'hasNumericPhoneLikeValue',
   'collectCanonicalPublicSemanticIssues',
   'collectCanonicalActivationStatusSchemaIssues',
+  'collectCanonicalConsoleHandoffReadinessIssues',
+  'handoff_ready_mismatch',
+  'handoff_last_dry_run_status_mismatch',
+  'collectCanonicalDoctorReportSchemaIssues',
+  'doctor_report_passed_with_blocked_checks',
+  'doctor_report_blocked_without_evidence',
+  'collectCanonicalFileMapConsistencyIssues',
+  'alias_mismatch',
+  'cross_file_doctor_status_mismatch',
+  'cross_file_handoff_summary_mismatch',
+  'assertNoSymlinkPathSegments',
+  'blocked_symlink_path_segment',
   'blocked_dry_run_step_claim_field',
   'collectBlockedEvidenceReadyClaimIssues',
   'evidence_ready_claim_for_blocked_activation',
@@ -196,6 +208,14 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing',
   'writeActivationRunnerFiles rejects ready status claims for blocked evidence',
   'writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard',
+  'writeActivationRunnerFiles accepts blocked not-run console handoff without ready claims',
+  'writeActivationRunnerFiles rejects handoff readiness that contradicts doctor status',
+  'writeActivationRunnerFiles rejects handoff lastDryRunSummary readiness mismatches',
+  'writeActivationRunnerFiles rejects inconsistent doctor report semantics',
+  'writeActivationRunnerFiles rejects mismatched root and workspace alias JSON',
+  'writeActivationRunnerFiles rejects cross-file doctor status mismatches',
+  'writeActivationRunnerFiles rejects evidence and handoff summary mismatches',
+  'writeActivationRunnerFiles blocks preexisting symlink path segments under output root',
   'evidence readiness is blocked when doctor status is blocked for an incomplete root',
   'console handoff blocks readiness when doctor has not run',
   'console handoff blocks readiness when doctor is blocked',
@@ -219,6 +239,11 @@ for (const phrase of [
   'blocked_doctor_not_run',
   'doctor_not_passed',
   'doctor_not_run',
+  'handoff_ready_mismatch',
+  'doctor_report_passed_with_blocked_checks',
+  'alias_mismatch',
+  'cross_file_doctor_status_mismatch',
+  'blocked_symlink_path_segment',
   'noLiveExecution: false',
   'runtimeAuthorityRequired: false',
   "providerConnection: 'enabled'",
@@ -873,6 +898,86 @@ for (const { filename, value, expected } of semanticBoundaryCases) {
     if (!error.message.includes(expected)) fail(`semantic boundary validator did not report expected blocker ${expected}`);
   }
 }
+const hostileHandoffReadiness = JSON.parse(writableFiles['console-handoff-summary.public.json']);
+hostileHandoffReadiness.doctorStatus = 'blocked';
+try {
+  validateActivationRunnerWritableFileMap({
+    'console-handoff-summary.public.json': `${JSON.stringify(hostileHandoffReadiness, null, 2)}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_handoff_readiness_self_check');
+  fail('file-map sink validator accepted handoff readiness without passed doctor');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`handoff readiness validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('handoff_ready_mismatch')) fail('handoff readiness validator did not report stable blocker code');
+}
+const hostileHandoffLastDryRun = buildConsoleHandoffSummary(validPack);
+hostileHandoffLastDryRun.lastDryRunSummary.status = 'dry_run_ready_no_live_execution';
+try {
+  validateActivationRunnerWritableFileMap({
+    'console-handoff-summary.public.json': `${JSON.stringify(hostileHandoffLastDryRun, null, 2)}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_handoff_last_dry_run_self_check');
+  fail('file-map sink validator accepted handoff lastDryRunSummary readiness mismatch');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`handoff lastDryRunSummary validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('handoff_last_dry_run_status_mismatch')) fail('handoff lastDryRunSummary validator did not report stable blocker code');
+}
+const hostileDoctorReport = JSON.parse(writableFiles['doctor-report.public.json']);
+hostileDoctorReport.checks[0].status = 'blocked';
+hostileDoctorReport.checks[0].reasonCodes = ['activation_pack_validation_required'];
+hostileDoctorReport.blockedReasonCodes = ['activation_pack_validation_required'];
+try {
+  validateActivationRunnerWritableFileMap({
+    'doctor-report.public.json': `${JSON.stringify(hostileDoctorReport, null, 2)}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_doctor_report_self_check');
+  fail('file-map sink validator accepted passed doctor report with blocked checks');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`doctor report validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('doctor_report_passed_with_blocked_checks')) fail('doctor report validator did not report stable blocker code');
+}
+const aliasDryRun = JSON.parse(writableFiles['workspace/plans/dry-run-plan.public.json']);
+aliasDryRun.status = 'dry_run_blocked_invalid_pack';
+try {
+  validateActivationRunnerWritableFileMap({
+    'dry-run-plan.public.json': writableFiles['dry-run-plan.public.json'],
+    'workspace/plans/dry-run-plan.public.json': `${JSON.stringify(aliasDryRun, null, 2)}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_alias_consistency_self_check');
+  fail('file-map sink validator accepted mismatched root/workspace aliases');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`alias consistency validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('alias_mismatch:dry-run-plan.public.json:workspace/plans/dry-run-plan.public.json')) fail('alias consistency validator did not report stable blocker code');
+}
+const crossDoctorReport = JSON.parse(writableFiles['doctor-report.public.json']);
+crossDoctorReport.status = 'blocked';
+crossDoctorReport.checks = [{
+  checkId: 'repo_package_structure',
+  status: 'blocked',
+  reasonCodes: ['repo_structure_missing'],
+  details: {},
+  publicSafe: true
+}];
+crossDoctorReport.blockedReasonCodes = ['repo_structure_missing'];
+try {
+  validateActivationRunnerWritableFileMap({
+    'doctor-report.public.json': `${JSON.stringify(crossDoctorReport, null, 2)}\n`,
+    'workspace/status/doctor-status.public.json': writableFiles['workspace/status/doctor-status.public.json'],
+    'console-handoff-summary.public.json': writableFiles['console-handoff-summary.public.json']
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_cross_file_doctor_self_check');
+  fail('file-map sink validator accepted cross-file doctor status mismatch');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`cross-file doctor validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('cross_file_doctor_status_mismatch')) fail('cross-file doctor validator did not report stable blocker code');
+}
+const crossHandoff = JSON.parse(writableFiles['console-handoff-summary.public.json']);
+crossHandoff.publicReasonCodes = [...crossHandoff.publicReasonCodes, 'operator_review_placeholder'];
+try {
+  validateActivationRunnerWritableFileMap({
+    'activation-evidence-pack.public.json': writableFiles['activation-evidence-pack.public.json'],
+    'console-handoff-summary.public.json': `${JSON.stringify(crossHandoff, null, 2)}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_cross_file_handoff_self_check');
+  fail('file-map sink validator accepted evidence/handoff summary mismatch');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`cross-file handoff validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('cross_file_handoff_summary_mismatch')) fail('cross-file handoff validator did not report stable blocker code');
+}
 const operationalClaim = 'payment was captured';
 try {
   validateActivationRunnerWritableFileMap({
@@ -961,6 +1066,32 @@ try {
   if (readdirSync(sinkOut).length !== 0) fail('writeActivationRunnerFiles wrote partial files before validation completed');
 } finally {
   rmSync(sinkOut, { recursive: true, force: true });
+}
+const symlinkOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-symlink-'));
+const symlinkTarget = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-symlink-target-'));
+let symlinkCreated = false;
+try {
+  try {
+    symlinkSync(symlinkTarget, join(symlinkOut, 'workspace'), process.platform === 'win32' ? 'junction' : 'dir');
+    symlinkCreated = true;
+  } catch {
+    symlinkCreated = false;
+  }
+  if (symlinkCreated) {
+    try {
+      writeActivationRunnerFiles({
+        'workspace/status/doctor-status.public.json': writableFiles['workspace/status/doctor-status.public.json']
+      }, symlinkOut);
+      fail('writeActivationRunnerFiles accepted a preexisting symlink path segment under output root');
+    } catch (error) {
+      if (!/blocked_symlink_path_segment|blocked_realpath_escape/.test(error.message)) {
+        fail(`symlink path segment guard reported unexpected error: ${error.message}`);
+      }
+    }
+  }
+} finally {
+  rmSync(symlinkOut, { recursive: true, force: true });
+  rmSync(symlinkTarget, { recursive: true, force: true });
 }
 const originalCwd = process.cwd();
 const nonRepoCwd = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-root-'));

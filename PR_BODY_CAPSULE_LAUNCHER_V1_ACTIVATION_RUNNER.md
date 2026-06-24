@@ -41,7 +41,8 @@ This v1 gate bridges Console private preview, Activation Pack, Launcher local va
 - Added CLI scripts for validate, doctor, dry-run and evidence generation.
 - Added a zero-dependency validator for v1 activation runner safety and determinism.
 - Added canonical public file schema validation at the writer boundary, string/numeric phone-like blocking, semantic boundary-value checks, forbidden operational-claim scanning and sanitized CLI summaries that do not echo raw output roots.
-- Added adversarial tests for unsafe refs, object keys, secret-shaped values, sensitive key names, live claims, phone-like values, false boundary values, canonical public outputs, hostile evidence payloads and unsafe CLI output roots.
+- Added writer-level guards for handoff readiness versus doctor status, inconsistent doctor reports, root/workspace alias drift, cross-file doctor/handoff status mismatches and preexisting symlink path segments under the output root.
+- Added adversarial tests for unsafe refs, object keys, secret-shaped values, sensitive key names, live claims, phone-like values, false boundary values, canonical public outputs, hostile evidence payloads, unsafe CLI output roots and canonical writer consistency bypasses.
 - Added operator, handoff and contract docs under `docs/v1-activation-runner`.
 - Added `.capsule-local/` to ignored generated output.
 
@@ -77,7 +78,7 @@ This v1 gate bridges Console private preview, Activation Pack, Launcher local va
 - `npm run -s capsule:activation:evidence` passed and wrote ignored local output under `.capsule-local/v1-activation-runner`.
 - `npm run -s typecheck` passed.
 - `npm run -s validate:v1-activation-runner` passed.
-- `npm run -s test` passed, 78 tests, 78 pass, 0 fail.
+- `npm run -s test` passed, 86 tests, 86 pass, 0 fail.
 - `npm run -s quality` passed.
 - `git diff --check` passed.
 
