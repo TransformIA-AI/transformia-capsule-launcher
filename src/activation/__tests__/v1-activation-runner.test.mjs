@@ -46,6 +46,10 @@ function assertNoPartialFiles(path) {
   assert.deepEqual(existsSync(path) ? readdirSync(path) : [], []);
 }
 
+function testPaymentValue(prefixParts) {
+  return `${prefixParts.join('_')}_${'a'.repeat(16)}`;
+}
+
 test('valid activation pack passes public-safe validation', () => {
   const report = validateV1ActivationPack(capsuleV1ActivationPackFixture);
   assert.equal(report.ok, true);
@@ -622,6 +626,32 @@ test('writeActivationRunnerFiles rejects unsafe JSON string content before writi
   }
 });
 
+test('writeActivationRunnerFiles rejects test payment prefix JSON content before writing', () => {
+  const paymentValues = [
+    testPaymentValue(['sk', 'test']),
+    testPaymentValue(['pk', 'test']),
+    testPaymentValue(['rk', 'test']),
+    `${['wh', 'sec'].join('')}_${'a'.repeat(16)}`
+  ];
+
+  for (const rawValue of paymentValues) {
+    const out = tempOutputDir();
+    try {
+      assert.throws(() => writeActivationRunnerFiles({
+        'activation-pack.public.json': `${JSON.stringify({ status: rawValue, publicSafe: true })}\n`
+      }, out), (error) => {
+        assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+        assert.match(error.message, /blocked_secret_like_value:root\.status/);
+        assert.doesNotMatch(error.message, escapedPattern(rawValue));
+        return true;
+      });
+      assertNoPartialFiles(out);
+    } finally {
+      cleanup(out);
+    }
+  }
+});
+
 test('writeActivationRunnerFiles rejects unsafe markdown content before writing', () => {
   const out = tempOutputDir();
   const rawEmail = ['person', 'example.invalid'].join('@');
@@ -640,6 +670,24 @@ test('writeActivationRunnerFiles rejects unsafe markdown content before writing'
   }
 });
 
+test('writeActivationRunnerFiles rejects test payment prefix markdown content before writing', () => {
+  const out = tempOutputDir();
+  const rawValue = testPaymentValue(['sk', 'test']);
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': `public sink must block ${rawValue}`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_secret_like_value:root\.content/);
+      assert.doesNotMatch(error.message, escapedPattern(rawValue));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
 test('writeActivationRunnerFiles rejects JSON object key PII before writing', () => {
   const out = tempOutputDir();
   const rawEmail = ['person', 'example.invalid'].join('@');
@@ -650,6 +698,24 @@ test('writeActivationRunnerFiles rejects JSON object key PII before writing', ()
       assert.ok(error instanceof ActivationRunnerWriteBlockedError);
       assert.match(error.message, /blocked_unsafe_key_name:root\.review\.<unsafe_key>/);
       assert.doesNotMatch(error.message, escapedPattern(rawEmail));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles writes no partial files when test payment prefix content is present', () => {
+  const out = tempOutputDir();
+  const rawValue = testPaymentValue(['rk', 'test']);
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n',
+      'activation-pack.public.json': `${JSON.stringify({ status: rawValue, publicSafe: true })}\n`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.doesNotMatch(error.message, escapedPattern(rawValue));
       return true;
     });
     assertNoPartialFiles(out);

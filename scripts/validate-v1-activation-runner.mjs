@@ -141,8 +141,11 @@ for (const phrase of [
   'activation pack validation scans object keys without echoing unsafe key material',
   'unknown activation pack fields fail closed and never reach canonical public output',
   'writeActivationRunnerFiles rejects unsafe JSON string content before writing',
+  'writeActivationRunnerFiles rejects test payment prefix JSON content before writing',
   'writeActivationRunnerFiles rejects unsafe markdown content before writing',
+  'writeActivationRunnerFiles rejects test payment prefix markdown content before writing',
   'writeActivationRunnerFiles rejects JSON object key PII before writing',
+  'writeActivationRunnerFiles writes no partial files when test payment prefix content is present',
   'writeActivationRunnerFiles validates all files before writing partial output',
   'buildActivationRunnerWritableFiles propagates requested root into evidence generation'
 ]) {
@@ -172,8 +175,12 @@ for (const heading of ['Summary', 'What changed', 'Commands/scripts added', 'Saf
   if (!prBody.includes(`## ${heading}`)) fail(`PR body missing section: ${heading}`);
 }
 if (!prBody.includes('## Exact Atlas Entry / Dani Approval')) fail('PR body must include Exact Atlas Entry / Dani Approval section');
-if (prBody.includes('26 tests')) fail('PR body contains stale 26 tests count');
-if (!/42 tests/.test(prBody)) fail('PR body must include current 42 tests count');
+for (const staleCount of ['26 tests', '42 tests']) {
+  if (prBody.includes(staleCount)) fail(`PR body contains stale ${staleCount} count`);
+}
+if (!prBody.includes('npm run -s test') || !/`npm run -s test`\s+passed/i.test(prBody)) {
+  fail('PR body must report npm run -s test passed without requiring a hardcoded count');
+}
 for (const phrase of [
   'v1.0-LAUNCHER-ACTIVATION-RUNNER',
   'Dani explicitly approves',
@@ -243,8 +250,8 @@ function assertNoForbiddenClaims(text, context) {
 }
 
 const secretPatterns = [
-  new RegExp(`${'sk' + '_live_'}[A-Za-z0-9_]+`, 'i'),
-  new RegExp(`${'pk' + '_live_'}[A-Za-z0-9_]+`, 'i'),
+  new RegExp(`${'(^|[^A-Za-z0-9_])(?:s|p|r)k_'}(?:test|live)_[A-Za-z0-9_]{12,}`, 'i'),
+  new RegExp(`${'(^|[^A-Za-z0-9_])wh' + 'sec_'}[A-Za-z0-9_]{12,}`, 'i'),
   new RegExp(`${'gh' + 'p_'}[A-Za-z0-9_]{20,}`, 'i'),
   /AKIA[0-9A-Z]{16}/,
   new RegExp(`BEGIN (RSA |EC |OPENSSH |PRIVATE )?PRIVATE KEY`),
@@ -579,6 +586,36 @@ try {
 } catch (error) {
   if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`file-map sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
   if (error.message.includes(sinkUrl)) fail('file-map sink validator leaked raw unsafe URL');
+}
+const testPaymentValues = [
+  `${['sk', 'test'].join('_')}_${'a'.repeat(16)}`,
+  `${['pk', 'test'].join('_')}_${'a'.repeat(16)}`,
+  `${['rk', 'test'].join('_')}_${'a'.repeat(16)}`,
+  `${['sk', 'live'].join('_')}_${'a'.repeat(16)}`,
+  `${['pk', 'live'].join('_')}_${'a'.repeat(16)}`,
+  `${['rk', 'live'].join('_')}_${'a'.repeat(16)}`,
+  `${['wh', 'sec'].join('')}_${'a'.repeat(16)}`
+];
+for (const rawValue of testPaymentValues) {
+  try {
+    validateActivationRunnerWritableFileMap({
+      'activation-pack.public.json': `${JSON.stringify({ status: rawValue, publicSafe: true })}\n`
+    }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_payment_prefix_self_check');
+    fail('file-map sink validator accepted payment prefix content');
+  } catch (error) {
+    if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`payment prefix sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+    if (error.message.includes(rawValue)) fail('payment prefix sink validator leaked raw value');
+  }
+}
+const markdownPaymentValue = testPaymentValues[0];
+try {
+  validateActivationRunnerWritableFileMap({
+    'README_ACTIVATION_RUNNER.md': `public sink must block ${markdownPaymentValue}`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_payment_markdown_self_check');
+  fail('file-map sink validator accepted markdown payment prefix content');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`markdown payment prefix sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (error.message.includes(markdownPaymentValue)) fail('markdown payment prefix sink validator leaked raw value');
 }
 const sinkOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-sink-'));
 try {

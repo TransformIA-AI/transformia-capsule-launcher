@@ -157,10 +157,12 @@ const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
 const LIVE_ENDPOINT_PATTERN = /\b(?:https?:\/\/|wss?:\/\/|ftp:\/\/)/i;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_PATTERN = /(?:\+\d[\d .-]{7,}\d|\b\d{3}[-. ]\d{3}[-. ]\d{3,4}\b)/;
+const PAYMENT_PREFIX_VALUE_PATTERN = ['(?:^|[^A-Za-z0-9_])', '(?:s|p|r)k_', '(?:test|live)', '_[A-Za-z0-9_]{12,}'].join('');
+const WEBHOOK_PREFIX_VALUE_PATTERN = ['(?:^|[^A-Za-z0-9_])', 'wh', 'sec_[A-Za-z0-9_]{12,}'].join('');
 const SECRET_VALUE_PATTERN = new RegExp(
   [
-    'sk' + '_live_',
-    'pk' + '_live_',
+    PAYMENT_PREFIX_VALUE_PATTERN,
+    WEBHOOK_PREFIX_VALUE_PATTERN,
     'gh' + 'p_[A-Za-z0-9_]{20,}',
     'AKIA[0-9A-Z]{16}',
     'BEGIN\\s+(?:RSA\\s+|EC\\s+|OPENSSH\\s+|PRIVATE\\s+)?PRIVATE\\s+KEY',

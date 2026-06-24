@@ -76,7 +76,7 @@ This v1 gate bridges Console private preview, Activation Pack, Launcher local va
 - `npm run -s capsule:activation:evidence` passed and wrote ignored local output under `.capsule-local/v1-activation-runner`.
 - `npm run -s typecheck` passed.
 - `npm run -s validate:v1-activation-runner` passed.
-- `npm run -s test` passed, 42 tests.
+- `npm run -s test` passed, 50 tests, 50 pass, 0 fail.
 - `npm run -s quality` passed.
 - `git diff --check` passed.
 
