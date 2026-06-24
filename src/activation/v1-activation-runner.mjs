@@ -163,6 +163,7 @@ const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
 const LIVE_ENDPOINT_PATTERN = /\b(?:https?:\/\/|wss?:\/\/|ftp:\/\/)/i;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_PATTERN = /(?:\+\d[\d .-]{7,}\d|\b\d{3}[-. ]\d{3}[-. ]\d{3,4}\b)/;
+const DIGIT_ONLY_PHONE_VALUE_PATTERN = /^\d{9,15}$/;
 const PAYMENT_PREFIX_VALUE_PATTERN = ['(?:^|[^A-Za-z0-9_])', '(?:s|p|r)k_', '(?:test|live)', '_[A-Za-z0-9_]{12,}'].join('');
 const WEBHOOK_PREFIX_VALUE_PATTERN = ['(?:^|[^A-Za-z0-9_])', 'wh', 'sec_[A-Za-z0-9_]{12,}'].join('');
 const SECRET_VALUE_PATTERN = new RegExp(
@@ -324,7 +325,7 @@ function hasNonEmptyPublicValue(value) {
 
 function isUnsafeKeyMaterial(key) {
   const text = String(key ?? '');
-  return LIVE_ENDPOINT_PATTERN.test(text) || EMAIL_PATTERN.test(text) || PHONE_PATTERN.test(text) || SECRET_VALUE_PATTERN.test(text);
+  return LIVE_ENDPOINT_PATTERN.test(text) || EMAIL_PATTERN.test(text) || hasPhoneLikeValue(text) || SECRET_VALUE_PATTERN.test(text);
 }
 
 function safePathForKey(path, key, forceUnsafe = false) {
@@ -353,6 +354,10 @@ function hasForbiddenPublicClaim(value) {
   return FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS.some((pattern) => pattern.test(scan));
 }
 
+function hasPhoneLikeValue(value) {
+  return PHONE_PATTERN.test(value) || DIGIT_ONLY_PHONE_VALUE_PATTERN.test(String(value).trim());
+}
+
 function validateSafeRef(issues, path, value) {
   if (typeof value !== 'string' || !SAFE_REF.test(value)) addIssue(issues, `invalid_safe_ref:${path}`);
 }
@@ -364,7 +369,7 @@ function validateAllowed(issues, path, value, allowed) {
 export function collectUnsafePublicMaterial(value, path = 'root', issues = [], options = {}) {
   if (typeof value === 'string') {
     if (LIVE_ENDPOINT_PATTERN.test(value)) addIssue(issues, `blocked_live_endpoint:${path}`);
-    if (EMAIL_PATTERN.test(value) || PHONE_PATTERN.test(value)) addIssue(issues, `blocked_pii_like_value:${path}`);
+    if (EMAIL_PATTERN.test(value) || hasPhoneLikeValue(value)) addIssue(issues, `blocked_pii_like_value:${path}`);
     if (SECRET_VALUE_PATTERN.test(value)) addIssue(issues, `blocked_secret_like_value:${path}`);
     if (hasForbiddenPublicClaim(value)) addIssue(issues, `blocked_forbidden_public_claim:${path}`);
     return issues;

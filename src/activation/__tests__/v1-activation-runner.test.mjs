@@ -798,6 +798,114 @@ test('writeActivationRunnerFiles rejects JSON object key PII before writing', ()
   }
 });
 
+test('writeActivationRunnerFiles rejects digit-only phone values in public JSON before writing', () => {
+  const rawPhone = '5551234567';
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n',
+      'doctor-report.public.json': publicJson({
+        doctorReportId: 'doctor_report_public_fixture',
+        status: 'blocked',
+        checks: [],
+        blockedReasonCodes: [rawPhone],
+        generatedAt: '2026-06-24T00:00:00.000Z',
+        publicSafe: true
+      })
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_pii_like_value:root\.blockedReasonCodes\.0/);
+      assert.doesNotMatch(error.message, escapedPattern(rawPhone));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects digit-only phone values in canonical evidence strings', () => {
+  const rawPhone = '5551234567';
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const evidencePack = JSON.parse(files['activation-evidence-pack.public.json']);
+  evidencePack.dryRunStatus = rawPhone;
+
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'activation-evidence-pack.public.json': publicJson(evidencePack)
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_pii_like_value:root\.dryRunStatus/);
+      assert.doesNotMatch(error.message, escapedPattern(rawPhone));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects digit-only phone markdown without echoing raw value', () => {
+  const rawPhone = '5551234567';
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': `${rawPhone}\n`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_pii_like_value:root\.content/);
+      assert.doesNotMatch(error.message, escapedPattern(rawPhone));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles still rejects plus-prefixed and separated phone values', () => {
+  for (const rawPhone of ['+34 600 123 456', '555-123-4567']) {
+    const out = tempOutputDir();
+    try {
+      assert.throws(() => writeActivationRunnerFiles({
+        'doctor-report.public.json': publicJson({
+          doctorReportId: 'doctor_report_public_fixture',
+          status: 'blocked',
+          checks: [],
+          blockedReasonCodes: [rawPhone],
+          generatedAt: '2026-06-24T00:00:00.000Z',
+          publicSafe: true
+        })
+      }, out), (error) => {
+        assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+        assert.match(error.message, /blocked_pii_like_value:root\.blockedReasonCodes\.0/);
+        assert.doesNotMatch(error.message, escapedPattern(rawPhone));
+        return true;
+      });
+      assertNoPartialFiles(out);
+    } finally {
+      cleanup(out);
+    }
+  }
+});
+
+test('digit-only phone detector does not block generated public-safe outputs or identifiers', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const evidencePack = JSON.parse(files['activation-evidence-pack.public.json']);
+  assert.equal(evidencePack.activationPackFingerprint, computeActivationPackFingerprint(capsuleV1ActivationPackFixture));
+  assert.equal(evidencePack.generatedAt, '2026-06-24T00:00:00.000Z');
+  assert.match(evidencePack.activationEvidencePackId, /^activation_evidence_pack_/);
+
+  const out = tempOutputDir();
+  try {
+    const written = writeActivationRunnerFiles(files, out);
+    assert.equal(written.length, V1_ACTIVATION_RUNNER_WRITABLE_FILES.length);
+  } finally {
+    cleanup(out);
+  }
+});
+
 test('writeActivationRunnerFiles writes no partial files when test payment prefix content is present', () => {
   const out = tempOutputDir();
   const rawValue = testPaymentValue(['rk', 'test']);

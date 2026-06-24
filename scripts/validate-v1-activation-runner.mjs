@@ -107,6 +107,8 @@ for (const phrase of [
   'validateActivationRunnerWritableFileMap',
   'validateCanonicalPublicFileObject',
   'blocked_public_file_schema',
+  'DIGIT_ONLY_PHONE_VALUE_PATTERN',
+  'hasPhoneLikeValue',
   'FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS',
   'blocked_forbidden_public_claim',
   'buildPublicOutputRootSummary',
@@ -162,6 +164,11 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects unsafe markdown content before writing',
   'writeActivationRunnerFiles rejects test payment prefix markdown content before writing',
   'writeActivationRunnerFiles rejects JSON object key PII before writing',
+  'writeActivationRunnerFiles rejects digit-only phone values in public JSON before writing',
+  'writeActivationRunnerFiles rejects digit-only phone values in canonical evidence strings',
+  'writeActivationRunnerFiles rejects digit-only phone markdown without echoing raw value',
+  'writeActivationRunnerFiles still rejects plus-prefixed and separated phone values',
+  'digit-only phone detector does not block generated public-safe outputs or identifiers',
   'writeActivationRunnerFiles writes no partial files when test payment prefix content is present',
   'writeActivationRunnerFiles validates all files before writing partial output',
   'writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing',
@@ -171,9 +178,16 @@ for (const phrase of [
   'output root summary sanitizer does not echo URL-shaped values',
   'CLI summaries do not echo unsafe output roots',
   'payment was captured',
+  '5551234567',
   'buildActivationRunnerWritableFiles propagates requested root into evidence generation'
 ]) {
   if (!activationRunnerTestSource.includes(phrase)) fail(`activation runner tests missing adversarial case: ${phrase}`);
+}
+if (!activationRunnerTestSource.includes('assert.doesNotMatch(error.message, escapedPattern(rawPhone))')) {
+  fail('activation runner tests must verify digit-only phone values are not echoed in blockers');
+}
+if (!activationRunnerTestSource.includes('assertNoPartialFiles(out)')) {
+  fail('activation runner tests must verify no partial writes for blocked digit-only phone values');
 }
 
 const docs = requiredDocs.filter(exists).map(read).join('\n');
@@ -621,6 +635,47 @@ try {
 } catch (error) {
   if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`file-map sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
   if (error.message.includes(sinkUrl)) fail('file-map sink validator leaked raw unsafe URL');
+}
+const digitOnlyPhone = '5551234567';
+const digitOnlyPhoneIssues = collectUnsafePublicMaterial({ blockedReasonCodes: [digitOnlyPhone] });
+if (!digitOnlyPhoneIssues.includes('blocked_pii_like_value:root.blockedReasonCodes.0')) fail('public material scanner did not detect digit-only phone value');
+try {
+  validateActivationRunnerWritableFileMap({
+    'doctor-report.public.json': `${JSON.stringify({
+      doctorReportId: 'doctor_report_public_fixture',
+      status: 'blocked',
+      checks: [],
+      blockedReasonCodes: [digitOnlyPhone],
+      generatedAt: '2026-06-24T00:00:00.000Z',
+      publicSafe: true
+    })}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_digit_phone_self_check');
+  fail('file-map sink validator accepted digit-only phone value');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`digit-only phone sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('blocked_pii_like_value:root.blockedReasonCodes.0')) fail('digit-only phone sink validator did not report stable blocker code');
+  if (error.message.includes(digitOnlyPhone)) fail('digit-only phone sink validator leaked raw phone value');
+}
+const digitOnlyPhoneOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-phone-'));
+try {
+  writeActivationRunnerFiles({
+    'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n',
+    'doctor-report.public.json': `${JSON.stringify({
+      doctorReportId: 'doctor_report_public_fixture',
+      status: 'blocked',
+      checks: [],
+      blockedReasonCodes: [digitOnlyPhone],
+      generatedAt: '2026-06-24T00:00:00.000Z',
+      publicSafe: true
+    })}\n`
+  }, digitOnlyPhoneOut);
+  fail('writeActivationRunnerFiles accepted digit-only phone value');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`digit-only phone writer must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (error.message.includes(digitOnlyPhone)) fail('digit-only phone writer leaked raw phone value');
+  if (readdirSync(digitOnlyPhoneOut).length !== 0) fail('digit-only phone writer wrote partial files before validation completed');
+} finally {
+  rmSync(digitOnlyPhoneOut, { recursive: true, force: true });
 }
 const operationalClaim = 'payment was captured';
 try {
