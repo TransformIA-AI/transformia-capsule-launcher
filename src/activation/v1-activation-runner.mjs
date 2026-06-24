@@ -95,6 +95,26 @@ const FORBIDDEN_ASSERTIVE_KEYS = new Set([
   'provisioned',
   'deployed'
 ]);
+const SENSITIVE_KEY_NAMES = new Set([
+  ['api', 'key'],
+  ['access', 'token'],
+  ['refresh', 'token'],
+  ['auth', 'token'],
+  ['bearer', 'token'],
+  ['pass', 'word'],
+  ['pass'],
+  ['sec', 'ret'],
+  ['client', 'sec', 'ret'],
+  ['private', 'key'],
+  ['creden', 'tial'],
+  ['creden', 'tials'],
+  ['provider', 'creden', 'tial'],
+  ['provider', 'creden', 'tials'],
+  ['stri', 'pe', 'sec', 'ret'],
+  ['webhook', 'sec', 'ret'],
+  ['oauth', 'client', 'sec', 'ret'],
+  ['session', 'token']
+].map((parts) => parts.join('')));
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -126,6 +146,10 @@ function addIssue(issues, code) {
   if (!issues.includes(code)) issues.push(code);
 }
 
+function normalizeKeyName(key) {
+  return String(key ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
 function validateSafeRef(issues, path, value) {
   if (typeof value !== 'string' || !SAFE_REF.test(value)) addIssue(issues, `invalid_safe_ref:${path}`);
 }
@@ -147,6 +171,20 @@ function collectUnsafeStrings(value, path = 'root', issues = []) {
   }
   if (value && typeof value === 'object') {
     for (const [key, entry] of Object.entries(value)) collectUnsafeStrings(entry, `${path}.${key}`, issues);
+  }
+  return issues;
+}
+
+function collectSensitiveKeyNames(value, path = 'root', issues = []) {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => collectSensitiveKeyNames(entry, `${path}.${index}`, issues));
+    return issues;
+  }
+  if (!value || typeof value !== 'object') return issues;
+  for (const [key, entry] of Object.entries(value)) {
+    const nextPath = `${path}.${key}`;
+    if (SENSITIVE_KEY_NAMES.has(normalizeKeyName(key))) addIssue(issues, `blocked_sensitive_key_name:${nextPath}`);
+    collectSensitiveKeyNames(entry, nextPath, issues);
   }
   return issues;
 }
@@ -254,6 +292,7 @@ export function validateV1ActivationPack(pack = buildDefaultV1ActivationPack()) 
   }
 
   for (const issue of collectUnsafeStrings(pack)) addIssue(blockers, issue);
+  for (const issue of collectSensitiveKeyNames(pack)) addIssue(blockers, issue);
   for (const issue of collectForbiddenAssertiveKeys(pack)) addIssue(blockers, issue);
 
   const ok = blockers.length === 0;

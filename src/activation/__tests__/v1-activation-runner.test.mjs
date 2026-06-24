@@ -55,6 +55,53 @@ test('secret-like values fail validation without preserving raw material in writ
   });
 });
 
+test('sensitive activation pack key names fail at any nesting level without leaking values', () => {
+  const rawValue = 'plain-value-should-not-leak';
+  const keyCases = [
+    ['api', 'Key'],
+    ['api', '_', 'key'],
+    ['API', 'KEY'],
+    ['access', 'Token'],
+    ['access', '_', 'token'],
+    ['refresh', 'Token'],
+    ['auth', '_', 'token'],
+    ['bearer', 'Token'],
+    ['pass', 'word'],
+    ['pass'],
+    ['sec', 'ret'],
+    ['client', 'Secret'],
+    ['client', '_', 'secret'],
+    ['private', 'Key'],
+    ['private', '_', 'key'],
+    ['creden', 'tial'],
+    ['creden', 'tials'],
+    ['provider', 'Credential'],
+    ['provider', '_', 'credentials'],
+    ['stri', 'pe', 'Secret'],
+    ['webhook', '_', 'secret'],
+    ['oauth', 'Client', 'Secret'],
+    ['oauth', '_', 'client', '_', 'secret'],
+    ['session', 'Token'],
+    ['session', '_', 'token']
+  ].map((parts) => parts.join(''));
+
+  for (const keyName of keyCases) {
+    const pack = buildDefaultV1ActivationPack({
+      nestedReviewSurface: [{ [keyName]: rawValue }]
+    });
+    const report = validateV1ActivationPack(pack);
+    const expectedBlocker = `blocked_sensitive_key_name:root.nestedReviewSurface.0.${keyName}`;
+    assert.equal(report.ok, false, keyName);
+    assert.ok(report.blockers.includes(expectedBlocker), keyName);
+    assert.throws(() => buildActivationRunnerWritableFiles(pack), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, new RegExp(expectedBlocker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      assert.doesNotMatch(error.message, new RegExp(rawValue));
+      return true;
+    });
+  }
+});
+
 test('missing no-live boundary fails validation', () => {
   const pack = buildDefaultV1ActivationPack({ boundaries: { noLiveExecution: false } });
   const report = validateV1ActivationPack(pack);

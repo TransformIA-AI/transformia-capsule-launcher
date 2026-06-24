@@ -20,6 +20,7 @@ import {
 } from '../src/activation/v1-activation-runner.mjs';
 
 const root = process.cwd();
+const runtimeEnv = globalThis.process?.env ?? {};
 const errors = [];
 const fail = (message) => errors.push(message);
 const exists = (path) => existsSync(join(root, path));
@@ -177,17 +178,67 @@ function gitScalar(args) {
   return result.status === 0 ? result.stdout.trim() : '';
 }
 
-function changedFiles() {
+function baseCandidates() {
+  const candidates = [];
+  const add = (candidate) => {
+    if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+  };
+  if (runtimeEnv.GITHUB_BASE_REF) {
+    add(`origin/${runtimeEnv.GITHUB_BASE_REF}`);
+    add(runtimeEnv.GITHUB_BASE_REF);
+  }
+  add(runtimeEnv.CI_MERGE_BASE);
+  if (runtimeEnv.GITHUB_SHA) add(`${runtimeEnv.GITHUB_SHA}^`);
+  add('origin/main');
+  add('main');
+  add('HEAD^');
+  return candidates;
+}
+
+function resolveDiffBase(candidates = baseCandidates()) {
+  for (const candidate of candidates) {
+    const mergeBase = gitScalar(['merge-base', 'HEAD', candidate]);
+    if (mergeBase) return { candidate, diffBase: mergeBase, method: 'merge-base' };
+    const resolved = gitScalar(['rev-parse', '--verify', candidate]);
+    if (resolved) return { candidate, diffBase: candidate, method: 'rev-parse' };
+  }
+  return null;
+}
+
+function changedFiles(options = {}) {
   const changed = new Set();
-  const mergeBase = gitScalar(['merge-base', 'HEAD', 'origin/main']);
-  const base = mergeBase || 'origin/main';
-  for (const file of git(['diff', '--name-only', `${base}...HEAD`])) changed.add(file);
+  const resolvedBase = resolveDiffBase(options.candidates ?? baseCandidates());
+  if (resolvedBase) {
+    for (const file of git(['diff', '--name-only', `${resolvedBase.diffBase}...HEAD`])) changed.add(file);
+    if (!changed.size) {
+      for (const file of git(['diff', '--name-only', `${resolvedBase.diffBase}..HEAD`])) changed.add(file);
+    }
+  }
   for (const file of git(['diff', '--name-only'])) changed.add(file);
   for (const file of git(['diff', '--name-only', '--cached'])) changed.add(file);
   for (const file of git(['ls-files', '--others', '--exclude-standard'])) changed.add(file);
   return [...changed];
 }
 
+function runChangedFileBaseSelfChecks() {
+  const withBaseRef = (() => {
+    const previous = runtimeEnv.GITHUB_BASE_REF;
+    runtimeEnv.GITHUB_BASE_REF = 'main';
+    const candidates = baseCandidates();
+    if (typeof previous === 'undefined') delete runtimeEnv.GITHUB_BASE_REF;
+    else runtimeEnv.GITHUB_BASE_REF = previous;
+    return candidates;
+  })();
+  if (withBaseRef[0] !== 'origin/main' || withBaseRef[1] !== 'main') fail('base candidate self-check missing GITHUB_BASE_REF origin/local order');
+  const defaultCandidates = baseCandidates();
+  for (const candidate of ['origin/main', 'main', 'HEAD^']) {
+    if (!defaultCandidates.includes(candidate)) fail(`base candidate self-check missing fallback: ${candidate}`);
+  }
+  const fallbackOnly = changedFiles({ candidates: ['refs/heads/definitely_missing_v1_activation_runner_base'] });
+  if (!Array.isArray(fallbackOnly)) fail('changed-file fallback self-check must return an array');
+}
+
+runChangedFileBaseSelfChecks();
 const changed = changedFiles();
 if (!changed.length) fail('changed-file guard found no files');
 for (const file of changed) {
