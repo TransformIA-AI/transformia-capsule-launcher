@@ -125,6 +125,11 @@ for (const phrase of [
   'buildPublicOutputRootSummary',
   'validateDoctorReportOverride',
   'blocked_doctor_report_override',
+  'explicitDoctorStatus',
+  'doctorPassed',
+  'blocked_doctor_not_passed',
+  'doctor_not_passed',
+  'buildConsoleHandoffSummary(pack, { doctorReport, doctorStatus })',
   'blocked_file_content'
 ]) {
   if (!source.includes(phrase)) fail(`runner source missing required safety token: ${phrase}`);
@@ -189,6 +194,8 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing',
   'writeActivationRunnerFiles rejects ready status claims for blocked evidence',
   'writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard',
+  'evidence readiness is blocked when doctor status is blocked for an incomplete root',
+  'invalid activation packs keep invalid-pack readiness even with doctor context',
   'writeActivationRunnerFiles rejects false activation status boundary values',
   'writeActivationRunnerFiles rejects enabled provider connection config values',
   'writeActivationRunnerFiles rejects false console handoff boundary values',
@@ -202,6 +209,8 @@ for (const phrase of [
   'payment was captured',
   'rawPhoneNumber = 5551234567',
   '5551234567',
+  'blocked_doctor_not_passed',
+  'doctor_not_passed',
   'noLiveExecution: false',
   'runtimeAuthorityRequired: false',
   "providerConnection: 'enabled'",
@@ -615,6 +624,27 @@ for (const boundary of ['dry_run_is_not_permission', 'no_provider_was_called', '
   if (!evidencePackA.explicitBoundaries.includes(boundary)) fail(`evidence pack missing boundary: ${boundary}`);
 }
 assertNoForbiddenClaims(JSON.stringify(evidencePackA), 'generated evidence pack');
+const incompleteDoctorRoot = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-incomplete-root-'));
+try {
+  const blockedDoctorEvidence = buildActivationEvidencePack(validPack, { root: incompleteDoctorRoot });
+  const blockedDoctorHandoffText = JSON.stringify(blockedDoctorEvidence.consoleHandoffSummary);
+  if (blockedDoctorEvidence.validationReport.ok !== true) fail('blocked doctor self-check must keep the activation pack valid');
+  if (blockedDoctorEvidence.doctorStatus !== 'blocked') fail('blocked doctor self-check did not produce blocked doctor status');
+  if (blockedDoctorEvidence.dryRunStatus !== 'blocked_doctor_not_passed') fail('blocked doctor self-check did not gate evidence dry-run status');
+  if (blockedDoctorEvidence.consoleHandoffSummary.launcherStatus !== 'activation_blocked') fail('blocked doctor handoff did not block launcher status');
+  if (blockedDoctorEvidence.consoleHandoffSummary.activationReadiness !== 'blocked_doctor_not_passed') fail('blocked doctor handoff did not report blocked_doctor_not_passed');
+  if (blockedDoctorEvidence.consoleHandoffSummary.evidencePackReady !== false) fail('blocked doctor handoff marked evidence ready');
+  if (blockedDoctorEvidence.launcherStatusSummary.evidencePackReady !== false) fail('blocked doctor launcher summary marked evidence ready');
+  if (!blockedDoctorEvidence.consoleHandoffSummary.publicReasonCodes.includes('doctor_not_passed')) fail('blocked doctor handoff missing doctor_not_passed reason');
+  if (/activation_prepared_for_review|dry_run_ready_no_live_execution/.test(blockedDoctorHandoffText)) {
+    fail('blocked doctor handoff leaked ready/prepared status');
+  }
+  validateActivationRunnerWritableFileMap({
+    'activation-evidence-pack.public.json': `${JSON.stringify(blockedDoctorEvidence, null, 2)}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_blocked_doctor_evidence_self_check');
+} finally {
+  rmSync(incompleteDoctorRoot, { recursive: true, force: true });
+}
 
 const writableFiles = buildActivationRunnerWritableFiles(validPack, { root, doctorReport });
 for (const expected of V1_ACTIVATION_RUNNER_WRITABLE_FILES) {

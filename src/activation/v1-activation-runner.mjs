@@ -681,26 +681,37 @@ export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack())
   }, 'dry-run-plan.public.json');
 }
 
-export function buildConsoleHandoffSummary(pack = buildDefaultV1ActivationPack()) {
+export function buildConsoleHandoffSummary(pack = buildDefaultV1ActivationPack(), options = {}) {
   const validationReport = validateV1ActivationPack(pack);
   const dryRunPlan = buildDryRunActivationPlan(pack);
+  const explicitDoctorStatus = options.doctorStatus ?? options.doctorReport?.status;
+  const doctorStatus = explicitDoctorStatus === undefined ? 'doctor_required_before_handoff' : normalizeDoctorStatus(explicitDoctorStatus);
+  const doctorPassed = explicitDoctorStatus === undefined ? true : doctorStatus === 'passed';
+  const ready = validationReport.ok === true && doctorPassed;
+  const activationReadiness = validationReport.ok ? (doctorPassed ? 'dry_run_ready_no_live_execution' : 'blocked_doctor_not_passed') : 'blocked_invalid_activation_pack';
+  const doctorBlockedReasonCodes = Array.isArray(options.doctorReport?.blockedReasonCodes)
+    ? options.doctorReport.blockedReasonCodes.filter((code) => typeof code === 'string' && code.length > 0)
+    : [];
+  const publicReasonCodes = validationReport.ok
+    ? ready
+      ? ['dry_run_ready_no_live_execution', 'runtime_authority_required', 'provider_commissioning_required']
+      : ['doctor_not_passed', 'runtime_authority_required', 'provider_commissioning_required', ...doctorBlockedReasonCodes]
+    : validationReport.blockers;
   return assertPublicSafeOutput({
-    launcherStatus: validationReport.ok ? 'activation_prepared_for_review' : 'activation_blocked',
-    activationReadiness: validationReport.ok ? 'dry_run_ready_no_live_execution' : 'blocked_invalid_activation_pack',
-    doctorStatus: 'doctor_required_before_handoff',
-    evidencePackReady: validationReport.ok,
-    localWorkspacePrepared: validationReport.ok,
+    launcherStatus: ready ? 'activation_prepared_for_review' : 'activation_blocked',
+    activationReadiness,
+    doctorStatus,
+    evidencePackReady: ready,
+    localWorkspacePrepared: ready,
     runtimeCommissioningRequired: true,
     providerCommissioningRequired: true,
     lastDryRunSummary: {
       dryRunPlanId: dryRunPlan.dryRunPlanId,
-      status: dryRunPlan.status,
+      status: ready ? dryRunPlan.status : activationReadiness,
       stepCount: dryRunPlan.steps.length,
       noLiveExecution: true
     },
-    publicReasonCodes: validationReport.ok
-      ? ['dry_run_ready_no_live_execution', 'runtime_authority_required', 'provider_commissioning_required']
-      : validationReport.blockers,
+    publicReasonCodes,
     boundaries: {
       dryRunIsNotPermission: true,
       runtimeRemainsAuthority: true,
@@ -794,7 +805,8 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
   const doctorStatus = normalizeDoctorStatus(doctorReport.status);
   const dryRunPlan = buildDryRunActivationPlan(pack);
   const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
-  const consoleHandoffSummary = buildConsoleHandoffSummary(pack);
+  const consoleHandoffSummary = buildConsoleHandoffSummary(pack, { doctorReport, doctorStatus });
+  const evidenceReady = validationReport.ok === true && doctorStatus === 'passed';
   const boundaryStatus = {
     dryRunIsNotPermission: true,
     noProviderWasCalled: true,
@@ -811,7 +823,7 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
     activationPackId: publicRefs.activationPackId,
     activationPackFingerprint: computeActivationPackFingerprint(pack),
     doctorStatus,
-    dryRunStatus: dryRunPlan.status,
+    dryRunStatus: validationReport.ok ? (evidenceReady ? dryRunPlan.status : 'blocked_doctor_not_passed') : dryRunPlan.status,
     boundaryStatus,
     generatedArtifacts: V1_ACTIVATION_RUNNER_WRITABLE_FILES.map((path) => ({ path, publicSafe: true, deterministic: true })),
     blockedLiveDisabledReasonCodes: [
@@ -830,8 +842,8 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
       launcherStatus: consoleHandoffSummary.launcherStatus,
       activationReadiness: consoleHandoffSummary.activationReadiness,
       doctorStatus,
-      evidencePackReady: validationReport.ok && doctorStatus === 'passed',
-      localWorkspacePrepared: localWorkspaceSkeleton.status === 'workspace_skeleton_prepared',
+      evidencePackReady: evidenceReady,
+      localWorkspacePrepared: consoleHandoffSummary.localWorkspacePrepared,
       runtimeCommissioningRequired: true,
       providerCommissioningRequired: true,
       publicReasonCodes: consoleHandoffSummary.publicReasonCodes
@@ -1332,7 +1344,7 @@ export function buildActivationRunnerWritableFiles(pack = buildDefaultV1Activati
   if (doctorReport.status !== 'passed') throw new ActivationRunnerWriteBlockedError(doctorReport.blockedReasonCodes ?? ['doctor_blocked']);
   const dryRunPlan = buildDryRunActivationPlan(canonicalPack);
   const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(canonicalPack);
-  const consoleHandoffSummary = buildConsoleHandoffSummary(canonicalPack);
+  const consoleHandoffSummary = buildConsoleHandoffSummary(canonicalPack, { doctorReport });
   const activationEvidencePack = buildActivationEvidencePack(canonicalPack, { root, doctorReport });
   const readme = `# Capsule Launcher v1 Activation Runner\n\nPublic-safe deterministic activation output. This output is a dry-run evidence and handoff package only. It does not call providers, create bookings, capture payment, send outbound messages, provision runtime state or grant live permission.\n\nActivation pack fingerprint: ${activationEvidencePack.activationPackFingerprint}\n`;
   const files = {

@@ -669,6 +669,10 @@ test('evidence pack is generated and cannot claim live execution', () => {
   const evidencePack = buildActivationEvidencePack(capsuleV1ActivationPackFixture, { doctorReport });
   const serialized = JSON.stringify(evidencePack);
   assert.equal(evidencePack.publicSafe, true);
+  assert.equal(evidencePack.doctorStatus, 'passed');
+  assert.equal(evidencePack.consoleHandoffSummary.launcherStatus, 'activation_prepared_for_review');
+  assert.equal(evidencePack.consoleHandoffSummary.activationReadiness, 'dry_run_ready_no_live_execution');
+  assert.equal(evidencePack.consoleHandoffSummary.evidencePackReady, true);
   assert.equal(evidencePack.boundaryStatus.noProviderWasCalled, true);
   assert.equal(evidencePack.boundaryStatus.noPaymentWasCaptured, true);
   assert.equal(evidencePack.boundaryStatus.runtimeRemainsAuthority, true);
@@ -677,6 +681,53 @@ test('evidence pack is generated and cannot claim live execution', () => {
   assert.doesNotMatch(serialized, /"bookingCreated"\s*:\s*true/i);
   assert.doesNotMatch(serialized, /"paymentCaptured"\s*:\s*true/i);
   assert.equal(evidencePack.activationPackFingerprint, computeActivationPackFingerprint(capsuleV1ActivationPackFixture));
+});
+
+test('evidence readiness is blocked when doctor status is blocked for an incomplete root', () => {
+  const incompleteRoot = tempOutputDir();
+  const out = tempOutputDir();
+  try {
+    const evidencePack = buildActivationEvidencePack(capsuleV1ActivationPackFixture, { root: incompleteRoot });
+    const handoffText = JSON.stringify(evidencePack.consoleHandoffSummary);
+
+    assert.equal(evidencePack.validationReport.ok, true);
+    assert.equal(evidencePack.doctorStatus, 'blocked');
+    assert.equal(evidencePack.dryRunStatus, 'blocked_doctor_not_passed');
+    assert.equal(evidencePack.consoleHandoffSummary.launcherStatus, 'activation_blocked');
+    assert.equal(evidencePack.consoleHandoffSummary.activationReadiness, 'blocked_doctor_not_passed');
+    assert.equal(evidencePack.consoleHandoffSummary.evidencePackReady, false);
+    assert.equal(evidencePack.consoleHandoffSummary.localWorkspacePrepared, false);
+    assert.equal(evidencePack.launcherStatusSummary.launcherStatus, 'activation_blocked');
+    assert.equal(evidencePack.launcherStatusSummary.activationReadiness, 'blocked_doctor_not_passed');
+    assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+    assert.ok(evidencePack.consoleHandoffSummary.publicReasonCodes.includes('doctor_not_passed'));
+    assert.ok(evidencePack.consoleHandoffSummary.publicReasonCodes.includes('runtime_authority_required'));
+    assert.ok(evidencePack.consoleHandoffSummary.publicReasonCodes.includes('provider_commissioning_required'));
+    assert.doesNotMatch(handoffText, /activation_prepared_for_review/);
+    assert.doesNotMatch(handoffText, /dry_run_ready_no_live_execution/);
+
+    const written = writeActivationRunnerFiles({
+      'activation-evidence-pack.public.json': publicJson(evidencePack)
+    }, out);
+    assert.equal(written.length, 1);
+  } finally {
+    cleanup(incompleteRoot);
+    cleanup(out);
+  }
+});
+
+test('invalid activation packs keep invalid-pack readiness even with doctor context', () => {
+  const pack = buildDefaultV1ActivationPack({ activationPackId: 'https://unsafe.example/activation/invalid' });
+  const evidencePack = buildActivationEvidencePack(pack, { root: process.cwd() });
+  const handoffText = JSON.stringify(evidencePack.consoleHandoffSummary);
+
+  assert.equal(evidencePack.validationReport.ok, false);
+  assert.equal(evidencePack.consoleHandoffSummary.launcherStatus, 'activation_blocked');
+  assert.equal(evidencePack.consoleHandoffSummary.activationReadiness, 'blocked_invalid_activation_pack');
+  assert.equal(evidencePack.consoleHandoffSummary.evidencePackReady, false);
+  assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+  assert.doesNotMatch(handoffText, /activation_prepared_for_review/);
+  assert.doesNotMatch(handoffText, /dry_run_ready_no_live_execution/);
 });
 
 test('doctor reports safe status for fixture and required repo structure', () => {
