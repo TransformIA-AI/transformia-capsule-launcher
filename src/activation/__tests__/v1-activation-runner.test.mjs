@@ -737,8 +737,60 @@ test('doctor reports safe status for fixture and required repo structure', () =>
   assert.ok(report.checks.some((check) => check.checkId === 'no_runtime_execution_enabled' && check.status === 'passed'));
 });
 
-test('console handoff output is public-safe and keeps commissioning required', () => {
+test('console handoff blocks readiness when doctor has not run', () => {
   const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture);
+  const serialized = JSON.stringify(handoff);
+
+  assert.equal(handoff.doctorStatus, 'not_run');
+  assert.equal(handoff.launcherStatus, 'activation_blocked');
+  assert.equal(handoff.activationReadiness, 'blocked_doctor_not_run');
+  assert.equal(handoff.evidencePackReady, false);
+  assert.equal(handoff.localWorkspacePrepared, true);
+  assert.ok(handoff.publicReasonCodes.includes('doctor_not_run'));
+  assert.ok(handoff.publicReasonCodes.includes('runtime_authority_required'));
+  assert.ok(handoff.publicReasonCodes.includes('provider_commissioning_required'));
+  assert.doesNotMatch(serialized, /activation_prepared_for_review/);
+  assert.doesNotMatch(serialized, /dry_run_ready_no_live_execution/);
+});
+
+test('console handoff blocks readiness when doctor is blocked', () => {
+  const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture, { doctorStatus: 'blocked' });
+  const serialized = JSON.stringify(handoff);
+
+  assert.equal(handoff.doctorStatus, 'blocked');
+  assert.equal(handoff.launcherStatus, 'activation_blocked');
+  assert.equal(handoff.activationReadiness, 'blocked_doctor_not_passed');
+  assert.equal(handoff.evidencePackReady, false);
+  assert.ok(handoff.publicReasonCodes.includes('doctor_not_passed'));
+  assert.doesNotMatch(serialized, /activation_prepared_for_review/);
+  assert.doesNotMatch(serialized, /dry_run_ready_no_live_execution/);
+});
+
+test('console handoff allows readiness only when doctor passed', () => {
+  const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture, { doctorStatus: 'passed' });
+
+  assert.equal(handoff.doctorStatus, 'passed');
+  assert.equal(handoff.launcherStatus, 'activation_prepared_for_review');
+  assert.equal(handoff.activationReadiness, 'dry_run_ready_no_live_execution');
+  assert.equal(handoff.evidencePackReady, true);
+  assert.ok(handoff.publicReasonCodes.includes('dry_run_ready_no_live_execution'));
+});
+
+test('console handoff keeps invalid packs blocked regardless of doctor status', () => {
+  const pack = buildDefaultV1ActivationPack({ activationPackId: 'https://unsafe.example/activation/invalid-handoff' });
+  const handoff = buildConsoleHandoffSummary(pack, { doctorStatus: 'passed' });
+  const serialized = JSON.stringify(handoff);
+
+  assert.equal(handoff.doctorStatus, 'passed');
+  assert.equal(handoff.launcherStatus, 'activation_blocked');
+  assert.equal(handoff.activationReadiness, 'blocked_invalid_activation_pack');
+  assert.equal(handoff.evidencePackReady, false);
+  assert.doesNotMatch(serialized, /activation_prepared_for_review/);
+  assert.doesNotMatch(serialized, /dry_run_ready_no_live_execution/);
+});
+
+test('console handoff output is public-safe and keeps commissioning required', () => {
+  const handoff = buildConsoleHandoffSummary(capsuleV1ActivationPackFixture, { doctorStatus: 'passed' });
   assert.equal(handoff.publicSafe, true);
   assert.equal(handoff.evidencePackReady, true);
   assert.equal(handoff.runtimeCommissioningRequired, true);

@@ -684,25 +684,28 @@ export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack())
 export function buildConsoleHandoffSummary(pack = buildDefaultV1ActivationPack(), options = {}) {
   const validationReport = validateV1ActivationPack(pack);
   const dryRunPlan = buildDryRunActivationPlan(pack);
-  const explicitDoctorStatus = options.doctorStatus ?? options.doctorReport?.status;
-  const doctorStatus = explicitDoctorStatus === undefined ? 'doctor_required_before_handoff' : normalizeDoctorStatus(explicitDoctorStatus);
-  const doctorPassed = explicitDoctorStatus === undefined ? true : doctorStatus === 'passed';
-  const ready = validationReport.ok === true && doctorPassed;
-  const activationReadiness = validationReport.ok ? (doctorPassed ? 'dry_run_ready_no_live_execution' : 'blocked_doctor_not_passed') : 'blocked_invalid_activation_pack';
+  const doctorStatus = normalizeDoctorStatus(options.doctorStatus ?? options.doctorReport?.status ?? 'not_run');
+  const packValid = validationReport.ok === true;
+  const doctorPassed = doctorStatus === 'passed';
+  const ready = packValid && doctorPassed;
+  const activationReadiness = packValid
+    ? (doctorStatus === 'not_run' ? 'blocked_doctor_not_run' : (doctorPassed ? 'dry_run_ready_no_live_execution' : 'blocked_doctor_not_passed'))
+    : 'blocked_invalid_activation_pack';
   const doctorBlockedReasonCodes = Array.isArray(options.doctorReport?.blockedReasonCodes)
     ? options.doctorReport.blockedReasonCodes.filter((code) => typeof code === 'string' && code.length > 0)
     : [];
-  const publicReasonCodes = validationReport.ok
+  const blockedDoctorReasonCode = doctorStatus === 'not_run' ? 'doctor_not_run' : 'doctor_not_passed';
+  const publicReasonCodes = packValid
     ? ready
       ? ['dry_run_ready_no_live_execution', 'runtime_authority_required', 'provider_commissioning_required']
-      : ['doctor_not_passed', 'runtime_authority_required', 'provider_commissioning_required', ...doctorBlockedReasonCodes]
+      : [blockedDoctorReasonCode, 'runtime_authority_required', 'provider_commissioning_required', ...doctorBlockedReasonCodes]
     : validationReport.blockers;
   return assertPublicSafeOutput({
     launcherStatus: ready ? 'activation_prepared_for_review' : 'activation_blocked',
     activationReadiness,
     doctorStatus,
     evidencePackReady: ready,
-    localWorkspacePrepared: ready,
+    localWorkspacePrepared: doctorStatus === 'not_run' ? packValid : ready,
     runtimeCommissioningRequired: true,
     providerCommissioningRequired: true,
     lastDryRunSummary: {

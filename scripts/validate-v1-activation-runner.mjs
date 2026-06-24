@@ -125,10 +125,12 @@ for (const phrase of [
   'buildPublicOutputRootSummary',
   'validateDoctorReportOverride',
   'blocked_doctor_report_override',
-  'explicitDoctorStatus',
   'doctorPassed',
   'blocked_doctor_not_passed',
+  'blocked_doctor_not_run',
   'doctor_not_passed',
+  'doctor_not_run',
+  "options.doctorStatus ?? options.doctorReport?.status ?? 'not_run'",
   'buildConsoleHandoffSummary(pack, { doctorReport, doctorStatus })',
   'blocked_file_content'
 ]) {
@@ -195,6 +197,10 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects ready status claims for blocked evidence',
   'writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard',
   'evidence readiness is blocked when doctor status is blocked for an incomplete root',
+  'console handoff blocks readiness when doctor has not run',
+  'console handoff blocks readiness when doctor is blocked',
+  'console handoff allows readiness only when doctor passed',
+  'console handoff keeps invalid packs blocked regardless of doctor status',
   'invalid activation packs keep invalid-pack readiness even with doctor context',
   'writeActivationRunnerFiles rejects false activation status boundary values',
   'writeActivationRunnerFiles rejects enabled provider connection config values',
@@ -210,7 +216,9 @@ for (const phrase of [
   'rawPhoneNumber = 5551234567',
   '5551234567',
   'blocked_doctor_not_passed',
+  'blocked_doctor_not_run',
   'doctor_not_passed',
+  'doctor_not_run',
   'noLiveExecution: false',
   'runtimeAuthorityRequired: false',
   "providerConnection: 'enabled'",
@@ -615,6 +623,18 @@ if (doctorReport.status !== 'passed') fail(`doctor did not pass fixture: ${docto
 
 const handoff = buildConsoleHandoffSummary(validPack);
 if (handoff.publicSafe !== true || handoff.runtimeCommissioningRequired !== true || handoff.providerCommissioningRequired !== true) fail('console handoff missing public-safe commissioning boundaries');
+if (handoff.doctorStatus !== 'not_run') fail('console handoff without doctor must default to not_run');
+if (handoff.launcherStatus !== 'activation_blocked') fail('console handoff without doctor must block launcher status');
+if (handoff.activationReadiness !== 'blocked_doctor_not_run') fail('console handoff without doctor must report blocked_doctor_not_run');
+if (handoff.evidencePackReady !== false) fail('console handoff without doctor must not mark evidence ready');
+if (!handoff.publicReasonCodes.includes('doctor_not_run')) fail('console handoff without doctor missing doctor_not_run reason');
+if (/activation_prepared_for_review|dry_run_ready_no_live_execution/.test(JSON.stringify(handoff))) {
+  fail('console handoff without doctor leaked ready/prepared status');
+}
+const passedDoctorHandoff = buildConsoleHandoffSummary(validPack, { doctorStatus: 'passed' });
+if (passedDoctorHandoff.launcherStatus !== 'activation_prepared_for_review') fail('console handoff with passed doctor did not become ready');
+if (passedDoctorHandoff.activationReadiness !== 'dry_run_ready_no_live_execution') fail('console handoff with passed doctor missing dry-run readiness');
+if (passedDoctorHandoff.evidencePackReady !== true) fail('console handoff with passed doctor must mark evidence ready');
 
 const evidencePackA = buildActivationEvidencePack(validPack, { doctorReport, dryRunPlan, localWorkspaceSkeleton: workspaceSkeleton, consoleHandoffSummary: handoff });
 const evidencePackB = buildActivationEvidencePack(validPack, { doctorReport, dryRunPlan, localWorkspaceSkeleton: workspaceSkeleton, consoleHandoffSummary: handoff });
