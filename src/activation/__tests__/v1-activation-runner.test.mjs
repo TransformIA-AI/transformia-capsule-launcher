@@ -1026,6 +1026,34 @@ test('writeActivationRunnerFiles validates all files before writing partial outp
   }
 });
 
+test('writeActivationRunnerFiles writes the validated file snapshot for mutable file maps', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const safeDoctorReport = files['doctor-report.public.json'];
+  const unsafeDoctorReport = publicJson({
+    ...JSON.parse(safeDoctorReport),
+    blockedReasonCodes: [testPaymentValue(['sk', 'test'])]
+  });
+  let readCount = 0;
+  const mutableFiles = {};
+  Object.defineProperty(mutableFiles, 'doctor-report.public.json', {
+    enumerable: true,
+    get() {
+      readCount += 1;
+      return readCount === 1 ? safeDoctorReport : unsafeDoctorReport;
+    }
+  });
+
+  const out = tempOutputDir();
+  try {
+    const written = writeActivationRunnerFiles(mutableFiles, out);
+    assert.equal(written.length, 1);
+    assert.equal(readCount, 1);
+    assert.equal(readFileSync(join(out, 'doctor-report.public.json'), 'utf8'), safeDoctorReport);
+  } finally {
+    cleanup(out);
+  }
+});
+
 test('writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing', () => {
   for (const filename of [
     'activation-evidence-pack.public.json',
@@ -1045,6 +1073,28 @@ test('writeActivationRunnerFiles rejects hostile evidence readiness JSON for roo
     } finally {
       cleanup(out);
     }
+  }
+});
+
+test('writeActivationRunnerFiles rejects ready status claims for blocked evidence', () => {
+  for (const filename of [
+    'activation-evidence-pack.public.json',
+    'workspace/evidence/activation-evidence-pack.public.json'
+  ]) {
+    const evidence = hostileEvidenceReadyPack();
+    evidence.dryRunStatus = 'dry_run_ready_no_live_execution';
+    evidence.launcherStatusSummary.evidencePackReady = false;
+    evidence.launcherStatusSummary.localWorkspacePrepared = false;
+    evidence.consoleHandoffSummary.launcherStatus = 'activation_prepared_for_review';
+    evidence.consoleHandoffSummary.activationReadiness = 'dry_run_ready_no_live_execution';
+    evidence.consoleHandoffSummary.evidencePackReady = false;
+    evidence.consoleHandoffSummary.localWorkspacePrepared = false;
+
+    assertPublicJsonWriteBlocked(
+      filename,
+      evidence,
+      /evidence_ready_claim_for_blocked_activation:root\.(dryRunStatus|launcherStatusSummary\.launcherStatus|consoleHandoffSummary\.launcherStatus)/
+    );
   }
 });
 

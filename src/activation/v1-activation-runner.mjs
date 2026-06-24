@@ -1045,6 +1045,22 @@ const DRY_RUN_STEP_ALLOWED_KEYS = new Set([
   'evidenceExpected'
 ]);
 
+function collectBlockedEvidenceReadyClaimIssues(surface, path, issues) {
+  if (!isPlainObject(surface)) return;
+  if (surface.launcherStatus === 'activation_prepared_for_review') {
+    addIssue(issues, `evidence_ready_claim_for_blocked_activation:${path}.launcherStatus`);
+  }
+  if (surface.activationReadiness === 'dry_run_ready_no_live_execution') {
+    addIssue(issues, `evidence_ready_claim_for_blocked_activation:${path}.activationReadiness`);
+  }
+  if (surface.evidencePackReady === true) {
+    addIssue(issues, `evidence_ready_claim_for_blocked_activation:${path}.evidencePackReady`);
+  }
+  if (surface.localWorkspacePrepared === true) {
+    addIssue(issues, `evidence_ready_claim_for_blocked_activation:${path}.localWorkspacePrepared`);
+  }
+}
+
 function collectCanonicalEvidenceSchemaIssues(parsed, issues) {
   if (!isPlainObject(parsed.validationReport)) addIssue(issues, 'evidence_validation_report_must_be_object');
   else {
@@ -1061,6 +1077,13 @@ function collectCanonicalEvidenceSchemaIssues(parsed, issues) {
       addIssue(issues, 'evidence_pack_ready_must_be_boolean');
     } else if (parsed.launcherStatusSummary.evidencePackReady !== expectedReady) {
       addIssue(issues, 'evidence_pack_ready_mismatch');
+    }
+    if (!expectedReady) {
+      if (parsed.dryRunStatus === 'dry_run_ready_no_live_execution') {
+        addIssue(issues, 'evidence_ready_claim_for_blocked_activation:root.dryRunStatus');
+      }
+      collectBlockedEvidenceReadyClaimIssues(parsed.launcherStatusSummary, 'root.launcherStatusSummary', issues);
+      collectBlockedEvidenceReadyClaimIssues(parsed.consoleHandoffSummary, 'root.consoleHandoffSummary', issues);
     }
   }
 
@@ -1209,6 +1232,7 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
   }
 
   const issues = [];
+  const validatedEntries = [];
   const root = outputRoot ? resolve(outputRoot) : undefined;
   for (const [filename, content] of Object.entries(files)) {
     const label = safeWritableFileLabel(filename, expected);
@@ -1253,12 +1277,14 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
       }).map((issue) => `blocked_file_content:${context}:${label}:${issue}`));
       issues.push(...validateCanonicalPublicFileObject(label, parsed)
         .map((issue) => `blocked_public_file_schema:${context}:${label}:${issue}`));
+      validatedEntries.push([filename, content]);
       continue;
     }
 
     if (filename.endsWith('.md')) {
       issues.push(...collectUnsafePublicMaterial(content, 'root.content', [])
         .map((issue) => `blocked_file_content:${context}:${label}:${issue}`));
+      validatedEntries.push([filename, content]);
       continue;
     }
 
@@ -1266,7 +1292,7 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
   }
 
   if (issues.length) throw new ActivationRunnerWriteBlockedError(issues);
-  return files;
+  return Object.fromEntries(validatedEntries);
 }
 
 function buildWorkspaceConfig(pack) {
@@ -1345,10 +1371,10 @@ export function buildActivationRunnerDryRunWritableFiles(pack = buildDefaultV1Ac
 export function writeActivationRunnerFiles(files, outputRoot) {
   if (!outputRoot || String(outputRoot).includes('..')) throw new Error('explicit_safe_output_root_required');
   const root = resolve(outputRoot);
-  validateActivationRunnerWritableFileMap(files, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'writeActivationRunnerFiles', root);
+  const validatedFiles = validateActivationRunnerWritableFileMap(files, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'writeActivationRunnerFiles', root);
   const written = [];
   mkdirSync(root, { recursive: true });
-  for (const [filename, content] of Object.entries(files)) {
+  for (const [filename, content] of Object.entries(validatedFiles)) {
     if (filename.includes('..')) throw new Error('unexpected_activation_runner_filename');
     const target = resolve(join(root, filename));
     assertInside(root, target);

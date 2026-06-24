@@ -114,6 +114,10 @@ for (const phrase of [
   'collectCanonicalPublicSemanticIssues',
   'collectCanonicalActivationStatusSchemaIssues',
   'blocked_dry_run_step_claim_field',
+  'collectBlockedEvidenceReadyClaimIssues',
+  'evidence_ready_claim_for_blocked_activation',
+  'validatedEntries',
+  'const validatedFiles = validateActivationRunnerWritableFileMap',
   'invalid_boundary_value',
   'invalid_disabled_value',
   'FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS',
@@ -181,7 +185,9 @@ for (const phrase of [
   'digit-only phone detector does not block generated public-safe outputs or identifiers',
   'writeActivationRunnerFiles writes no partial files when test payment prefix content is present',
   'writeActivationRunnerFiles validates all files before writing partial output',
+  'writeActivationRunnerFiles writes the validated file snapshot for mutable file maps',
   'writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing',
+  'writeActivationRunnerFiles rejects ready status claims for blocked evidence',
   'writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard',
   'writeActivationRunnerFiles rejects false activation status boundary values',
   'writeActivationRunnerFiles rejects enabled provider connection config values',
@@ -614,6 +620,28 @@ const writableFiles = buildActivationRunnerWritableFiles(validPack, { root, doct
 for (const expected of V1_ACTIVATION_RUNNER_WRITABLE_FILES) {
   if (!Object.hasOwn(writableFiles, expected)) fail(`writable output missing file: ${expected}`);
 }
+const safeDoctorReportSnapshot = writableFiles['doctor-report.public.json'];
+const unsafeDoctorReportSnapshot = `${JSON.stringify({
+  ...JSON.parse(safeDoctorReportSnapshot),
+  blockedReasonCodes: [[...'sk_test_aaaaaaaaaaaaaaaa'].join('')]
+})}\n`;
+let mutableFileReadCount = 0;
+const mutableFileMap = {};
+Object.defineProperty(mutableFileMap, 'doctor-report.public.json', {
+  enumerable: true,
+  get() {
+    mutableFileReadCount += 1;
+    return mutableFileReadCount === 1 ? safeDoctorReportSnapshot : unsafeDoctorReportSnapshot;
+  }
+});
+const mutableSnapshotOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-snapshot-'));
+try {
+  writeActivationRunnerFiles(mutableFileMap, mutableSnapshotOut);
+  if (mutableFileReadCount !== 1) fail('writer re-read mutable file map after validation instead of writing the validated snapshot');
+  if (readFileSync(join(mutableSnapshotOut, 'doctor-report.public.json'), 'utf8') !== safeDoctorReportSnapshot) fail('writer did not write the validated file snapshot');
+} finally {
+  rmSync(mutableSnapshotOut, { recursive: true, force: true });
+}
 const canonicalPack = buildCanonicalPublicV1ActivationPack(validPack);
 const emittedActivationPack = JSON.parse(writableFiles['activation-pack.public.json']);
 if (JSON.stringify(emittedActivationPack) !== JSON.stringify(canonicalPack)) fail('writer emitted non-canonical activation pack');
@@ -766,6 +794,23 @@ semanticBoundaryCases.push({
   filename: 'activation-evidence-pack.public.json',
   value: semanticEvidence,
   expected: 'invalid_boundary_value:root.boundaryStatus.noPaymentWasCaptured'
+});
+const blockedEvidenceReadyClaim = JSON.parse(writableFiles['activation-evidence-pack.public.json']);
+blockedEvidenceReadyClaim.validationReport.ok = false;
+blockedEvidenceReadyClaim.doctorStatus = 'blocked';
+blockedEvidenceReadyClaim.dryRunStatus = 'dry_run_ready_no_live_execution';
+blockedEvidenceReadyClaim.launcherStatusSummary.evidencePackReady = false;
+blockedEvidenceReadyClaim.launcherStatusSummary.launcherStatus = 'activation_prepared_for_review';
+blockedEvidenceReadyClaim.launcherStatusSummary.activationReadiness = 'dry_run_ready_no_live_execution';
+blockedEvidenceReadyClaim.launcherStatusSummary.localWorkspacePrepared = false;
+blockedEvidenceReadyClaim.consoleHandoffSummary.launcherStatus = 'activation_prepared_for_review';
+blockedEvidenceReadyClaim.consoleHandoffSummary.activationReadiness = 'dry_run_ready_no_live_execution';
+blockedEvidenceReadyClaim.consoleHandoffSummary.evidencePackReady = false;
+blockedEvidenceReadyClaim.consoleHandoffSummary.localWorkspacePrepared = false;
+semanticBoundaryCases.push({
+  filename: 'activation-evidence-pack.public.json',
+  value: blockedEvidenceReadyClaim,
+  expected: 'evidence_ready_claim_for_blocked_activation:root.dryRunStatus'
 });
 for (const { filename, value, expected } of semanticBoundaryCases) {
   try {
