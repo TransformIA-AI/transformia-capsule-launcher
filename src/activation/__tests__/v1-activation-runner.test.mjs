@@ -6,12 +6,15 @@ import { tmpdir } from 'node:os';
 import {
   ActivationRunnerWriteBlockedError,
   V1_ACTIVATION_RUNNER_WRITABLE_FILES,
+  assertPublicSafeOutput,
   buildActivationEvidencePack,
   buildActivationRunnerWritableFiles,
+  buildCanonicalPublicV1ActivationPack,
   buildConsoleHandoffSummary,
   buildDefaultV1ActivationPack,
   buildDryRunActivationPlan,
   buildLocalWorkspaceSkeleton,
+  collectUnsafePublicMaterial,
   computeActivationPackFingerprint,
   runActivationDoctor,
   validateV1ActivationPack,
@@ -25,6 +28,17 @@ function tempOutputDir() {
 
 function cleanup(path) {
   rmSync(path, { recursive: true, force: true });
+}
+
+function escapedPattern(value) {
+  return new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+}
+
+function assertNoRawMaterial(outputs, rawValues) {
+  for (const output of outputs) {
+    const text = typeof output === 'string' ? output : JSON.stringify(output);
+    for (const raw of rawValues) assert.doesNotMatch(text, escapedPattern(raw));
+  }
 }
 
 test('valid activation pack passes public-safe validation', () => {
@@ -53,6 +67,58 @@ test('secret-like values fail validation without preserving raw material in writ
     assert.doesNotMatch(error.message, /abc12345678/);
     return true;
   });
+});
+
+test('activation pack validation scans object keys without echoing unsafe key material', () => {
+  const rawEmail = ['customer', 'example.invalid'].join('@');
+  const rawUrl = 'https://unsafe.example';
+  const rawTokenKey = `${'gh' + 'p_'}aaaaaaaaaaaaaaaaaaaaaaaa`;
+  const sensitiveKey = ['api', '_', 'key'].join('');
+  const cases = [
+    {
+      pack: buildDefaultV1ActivationPack({ review: { [`[${rawEmail}](mailto:${rawEmail})`]: 'ok' } }),
+      blocker: 'blocked_unsafe_key_name:root.review.<unsafe_key>',
+      rawValues: [rawEmail]
+    },
+    {
+      pack: buildDefaultV1ActivationPack({ review: { [rawUrl]: 'ok' } }),
+      blocker: 'blocked_unsafe_key_name:root.review.<unsafe_key>',
+      rawValues: [rawUrl]
+    },
+    {
+      pack: buildDefaultV1ActivationPack({ review: { [sensitiveKey]: 'ok' } }),
+      blocker: 'blocked_sensitive_key_name:root.review.<unsafe_key>',
+      rawValues: [sensitiveKey]
+    },
+    {
+      pack: buildDefaultV1ActivationPack({ review: { [rawTokenKey]: 'ok' } }),
+      blocker: 'blocked_unsafe_key_name:root.review.<unsafe_key>',
+      rawValues: [rawTokenKey]
+    }
+  ];
+
+  for (const { pack, blocker, rawValues } of cases) {
+    const report = validateV1ActivationPack(pack);
+    const doctorReport = runActivationDoctor({ root: process.cwd(), activationPack: pack });
+    const dryRunPlan = buildDryRunActivationPlan(pack);
+    const workspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
+    const evidencePack = buildActivationEvidencePack(pack, { doctorReport, dryRunPlan, localWorkspaceSkeleton: workspaceSkeleton });
+    const consoleHandoff = buildConsoleHandoffSummary(pack);
+
+    assert.equal(report.ok, false);
+    assert.ok(report.blockers.includes(blocker));
+    assert.throws(() => buildActivationRunnerWritableFiles(pack), ActivationRunnerWriteBlockedError);
+    assertNoRawMaterial([report, doctorReport, dryRunPlan, workspaceSkeleton, evidencePack, consoleHandoff], rawValues);
+  }
+});
+
+test('unknown activation pack fields fail closed and never reach canonical public output', () => {
+  const pack = buildDefaultV1ActivationPack({ extraOperatorPayload: 'ok' });
+  const report = validateV1ActivationPack(pack);
+  assert.equal(report.ok, false);
+  assert.ok(report.blockers.includes('unknown_activation_pack_field:root.extraOperatorPayload'));
+  assert.throws(() => buildCanonicalPublicV1ActivationPack(pack), ActivationRunnerWriteBlockedError);
+  assert.throws(() => buildActivationRunnerWritableFiles(pack), ActivationRunnerWriteBlockedError);
 });
 
 test('sensitive activation pack key names fail at any nesting level without leaking values', () => {
@@ -90,13 +156,14 @@ test('sensitive activation pack key names fail at any nesting level without leak
       nestedReviewSurface: [{ [keyName]: rawValue }]
     });
     const report = validateV1ActivationPack(pack);
-    const expectedBlocker = `blocked_sensitive_key_name:root.nestedReviewSurface.0.${keyName}`;
+    const expectedBlocker = 'blocked_sensitive_key_name:root.nestedReviewSurface.0.<unsafe_key>';
     assert.equal(report.ok, false, keyName);
     assert.ok(report.blockers.includes(expectedBlocker), keyName);
     assert.throws(() => buildActivationRunnerWritableFiles(pack), (error) => {
       assert.ok(error instanceof ActivationRunnerWriteBlockedError);
       assert.match(error.message, new RegExp(expectedBlocker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       assert.doesNotMatch(error.message, new RegExp(rawValue));
+      assert.doesNotMatch(error.message, new RegExp(keyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       return true;
     });
   }
@@ -117,15 +184,15 @@ test('sensitive activation pack key names fail at root, nested object, and array
     const fixtures = [
       {
         pack: buildDefaultV1ActivationPack({ [keyName]: rawValue }),
-        blocker: `blocked_sensitive_key_name:root.${keyName}`
+        blocker: 'blocked_sensitive_key_name:root.<unsafe_key>'
       },
       {
         pack: buildDefaultV1ActivationPack({ sensitiveReview: { [keyName]: rawValue } }),
-        blocker: `blocked_sensitive_key_name:root.sensitiveReview.${keyName}`
+        blocker: 'blocked_sensitive_key_name:root.sensitiveReview.<unsafe_key>'
       },
       {
         pack: buildDefaultV1ActivationPack({ sensitiveReview: [{ [keyName]: rawValue }] }),
-        blocker: `blocked_sensitive_key_name:root.sensitiveReview.0.${keyName}`
+        blocker: 'blocked_sensitive_key_name:root.sensitiveReview.0.<unsafe_key>'
       }
     ];
 
@@ -142,6 +209,7 @@ test('sensitive activation pack key names fail at root, nested object, and array
       assert.throws(() => buildActivationRunnerWritableFiles(pack), ActivationRunnerWriteBlockedError);
       for (const output of [doctorReport, dryRunPlan, workspaceSkeleton, evidencePack, consoleHandoff]) {
         assert.doesNotMatch(JSON.stringify(output), new RegExp(rawValue));
+        assert.doesNotMatch(JSON.stringify(output), new RegExp(keyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       }
     }
   }
@@ -209,12 +277,90 @@ test('public skeleton, evidence, and handoff do not echo hostile boundary payloa
   assert.equal(validateV1ActivationPack(pack).ok, false);
   assert.deepEqual(Object.keys(workspaceSkeleton.boundaries), canonicalBoundaryKeys);
   assert.ok(Object.values(workspaceSkeleton.boundaries).every((value) => typeof value === 'boolean'));
-  for (const raw of [rawUrl, rawValue, rawEmail]) {
-    const rawPattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    for (const output of [workspaceSkeleton, evidencePack, consoleHandoff]) {
-      assert.doesNotMatch(JSON.stringify(output), rawPattern);
+  assertNoRawMaterial([workspaceSkeleton, evidencePack, consoleHandoff], [rawUrl, rawValue, rawEmail, sensitiveKey]);
+});
+
+test('canonical public activation pack contains only allowlisted fields', () => {
+  const canonical = buildCanonicalPublicV1ActivationPack(capsuleV1ActivationPackFixture);
+  assert.deepEqual(Object.keys(canonical), [
+    'activationPackId',
+    'tenantDraftId',
+    'workspaceRef',
+    'organizationRef',
+    'template',
+    'vertical',
+    'planPath',
+    'activationMode',
+    'runtimeMode',
+    'launcherMode',
+    'requestedChannels',
+    'boundaries',
+    'safetyFlags',
+    'generatedAt',
+    'publicSafe'
+  ]);
+  assert.deepEqual(Object.keys(canonical.boundaries), Object.keys(canonical.safetyFlags));
+  assert.ok(Object.values(canonical.boundaries).every((value) => typeof value === 'boolean'));
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const emittedPack = JSON.parse(files['activation-pack.public.json']);
+  assert.deepEqual(emittedPack, canonical);
+  assert.equal(Object.hasOwn(emittedPack, 'extraOperatorPayload'), false);
+});
+
+test('doctor report overrides cannot inject public unsafe details into writer output', () => {
+  const rawEmail = ['person', 'example.invalid'].join('@');
+  const rawProviderUrl = 'https://provider.example';
+  const rawToken = 'abc12345678';
+  const overrideCases = [
+    {
+      doctorReport: {
+        status: 'passed',
+        checks: [{ checkId: 'provider_health', status: 'passed', details: { customerEmail: `[${rawEmail}](mailto:${rawEmail})` } }],
+        blockedReasonCodes: [],
+        publicSafe: true
+      },
+      rawValues: [rawEmail]
+    },
+    {
+      doctorReport: {
+        status: 'passed',
+        checks: [{ checkId: 'provider_health', status: 'passed', details: { accessToken: rawToken } }],
+        blockedReasonCodes: [],
+        publicSafe: true
+      },
+      rawValues: [rawToken, 'accessToken']
+    },
+    {
+      doctorReport: {
+        status: 'passed',
+        checks: [{ checkId: 'provider_health', status: 'passed', details: { providerUrl: rawProviderUrl } }],
+        blockedReasonCodes: [],
+        publicSafe: true
+      },
+      rawValues: [rawProviderUrl]
     }
+  ];
+
+  for (const { doctorReport, rawValues } of overrideCases) {
+    assert.throws(() => buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd(), doctorReport }), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_doctor_report_override/);
+      assertNoRawMaterial([error.message], rawValues);
+      return true;
+    });
   }
+});
+
+test('public output guard blocks malicious internal objects', () => {
+  const rawEmail = ['guard', 'example.invalid'].join('@');
+  const unsafeIssues = collectUnsafePublicMaterial({ details: { [`[${rawEmail}](mailto:${rawEmail})`]: 'ok' } });
+  assert.ok(unsafeIssues.includes('blocked_unsafe_key_name:root.details.<unsafe_key>'));
+  assert.throws(() => assertPublicSafeOutput({ details: { customerEmail: rawEmail } }, 'malicious-test-output'), (error) => {
+    assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+    assert.match(error.message, /blocked_public_output:malicious-test-output/);
+    assert.doesNotMatch(error.message, escapedPattern(rawEmail));
+    return true;
+  });
 });
 
 test('normalized live and assertive key names fail before writer serialization', () => {
@@ -240,20 +386,24 @@ test('normalized live and assertive key names fail before writer serialization',
       }
     });
     const report = validateV1ActivationPack(pack);
-    const expectedBlocker = `blocked_assertive_live_field:root.nestedLiveSurface.reviewItems.0.${key}`;
+    const expectedBlocker = 'blocked_assertive_live_field:root.nestedLiveSurface.reviewItems.0.<unsafe_key>';
     assert.equal(report.ok, false, key);
     assert.ok(report.blockers.includes(expectedBlocker), key);
     assert.throws(() => buildActivationRunnerWritableFiles(pack), (error) => {
       assert.ok(error instanceof ActivationRunnerWriteBlockedError);
       assert.match(error.message, new RegExp(expectedBlocker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       assert.doesNotMatch(error.message, /provider_placeholder|checkout_placeholder|person/);
+      assert.doesNotMatch(error.message, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       return true;
     });
   }
 
-  assert.equal(validateV1ActivationPack(buildDefaultV1ActivationPack({
+  const falseLiveReport = validateV1ActivationPack(buildDefaultV1ActivationPack({
     nestedLiveSurface: { reviewItems: [{ live_execution_enabled: false }] }
-  })).ok, true);
+  }));
+  assert.equal(falseLiveReport.ok, false);
+  assert.ok(falseLiveReport.blockers.includes('unknown_activation_pack_field:root.nestedLiveSurface'));
+  assert.ok(!falseLiveReport.blockers.includes('blocked_assertive_live_field:root.nestedLiveSurface.reviewItems.0.<unsafe_key>'));
 });
 
 test('missing no-live boundary fails validation', () => {

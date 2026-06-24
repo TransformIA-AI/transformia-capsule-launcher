@@ -44,6 +44,8 @@ npm run -s capsule:activation:evidence -- --output .capsule-local\v1-activation-
 
 All refs must be safe refs. No provider credentials. No customer PII. No payment capture. No outbound messaging. No calendar booking. No provisioning.
 
+The runner treats the input pack as untrusted operator input. Public outputs are built from a canonical allowlisted activation pack shape; the raw input pack is never written directly. Unknown top-level fields and unknown nested boundary or safety fields fail closed before writer serialization.
+
 ## Outputs
 
 Generated output is written under `.capsule-local/v1-activation-runner`, which is ignored and must not be committed.
@@ -61,6 +63,8 @@ Generated output is written under `.capsule-local/v1-activation-runner`, which i
 - `workspace/evidence/activation-evidence-pack.public.json`
 - `workspace/handoff/console-handoff-summary.public.json`
 
+Every generated JSON surface passes the same public-output guard before it is returned or written. That guard scans object keys and values, omits arbitrary operator payload, and blocks URL-shaped, email-shaped, phone-shaped, token-shaped, sensitive-key and live-claim material.
+
 ## Boundaries
 
 - dry-run is not permission.
@@ -69,6 +73,7 @@ Generated output is written under `.capsule-local/v1-activation-runner`, which i
 - Provider commissioning remains a later reviewed step.
 - Web Console may later render the future console handoff, but this repo does not modify Web.
 - DAD means Deterministic Action Dossier. The runner emits a public-safe DAD placeholder only.
+- Doctor reports used for writer output are recomputed or checked at the public boundary; caller-supplied doctor details are not trusted as public evidence.
 
 ## Safe demo flow
 

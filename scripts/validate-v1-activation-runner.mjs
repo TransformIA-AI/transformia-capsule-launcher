@@ -7,12 +7,15 @@ import {
   V1_ACTIVATION_RUNNER_REQUIRED_FILES,
   V1_ACTIVATION_RUNNER_REQUIRED_SCRIPTS,
   V1_ACTIVATION_RUNNER_WRITABLE_FILES,
+  assertPublicSafeOutput,
   buildActivationEvidencePack,
   buildActivationRunnerWritableFiles,
+  buildCanonicalPublicV1ActivationPack,
   buildConsoleHandoffSummary,
   buildDefaultV1ActivationPack,
   buildDryRunActivationPlan,
   buildLocalWorkspaceSkeleton,
+  collectUnsafePublicMaterial,
   computeActivationPackFingerprint,
   runActivationDoctor,
   validateV1ActivationPack,
@@ -67,6 +70,9 @@ const source = exists('src/activation/v1-activation-runner.mjs') ? read('src/act
 for (const exported of [
   'buildDefaultV1ActivationPack',
   'validateV1ActivationPack',
+  'collectUnsafePublicMaterial',
+  'assertPublicSafeOutput',
+  'buildCanonicalPublicV1ActivationPack',
   'buildLocalWorkspaceSkeleton',
   'runActivationDoctor',
   'buildDryRunActivationPlan',
@@ -86,9 +92,20 @@ for (const phrase of [
   'noCalendarBooking',
   'runtimeAuthorityRequired',
   'provider_commissioning_required',
-  "buildSafeDerivedId('dad'"
+  "buildSafeDerivedId('dad'",
+  'collectUnsafePublicMaterial',
+  'buildCanonicalPublicV1ActivationPack',
+  'assertPublicSafeOutput',
+  'validateDoctorReportOverride',
+  'blocked_doctor_report_override'
 ]) {
   if (!source.includes(phrase)) fail(`runner source missing required safety token: ${phrase}`);
+}
+if (source.includes("'activation-pack.public.json': publicJson(pack)") || source.includes('"activation-pack.public.json": publicJson(pack)')) {
+  fail('runner writer must not serialize raw activation pack');
+}
+if (!source.includes("'activation-pack.public.json': publicJsonOutput('activation-pack.public.json', canonicalPack)")) {
+  fail('runner writer must serialize canonical activation pack through final guard');
 }
 
 const docs = requiredDocs.filter(exists).map(read).join('\n');
@@ -280,6 +297,45 @@ try {
   if (/abc12345678/.test(error.message)) fail('writer leaked raw secret-like fixture value');
 }
 
+const objectKeyEmail = ['customer', 'example.invalid'].join('@');
+const objectKeyUrl = ['ht', 'tps://unsafe.example'].join('');
+const objectKeyToken = `${'gh' + 'p_'}aaaaaaaaaaaaaaaaaaaaaaaa`;
+const objectSensitiveKey = ['api', '_', 'key'].join('');
+for (const [pack, expectedBlocker, raw] of [
+  [buildDefaultV1ActivationPack({ review: { [`[${objectKeyEmail}](mailto:${objectKeyEmail})`]: 'ok' } }), 'blocked_unsafe_key_name:root.review.<unsafe_key>', objectKeyEmail],
+  [buildDefaultV1ActivationPack({ review: { [objectKeyUrl]: 'ok' } }), 'blocked_unsafe_key_name:root.review.<unsafe_key>', objectKeyUrl],
+  [buildDefaultV1ActivationPack({ review: { [objectSensitiveKey]: 'ok' } }), 'blocked_sensitive_key_name:root.review.<unsafe_key>', objectSensitiveKey],
+  [buildDefaultV1ActivationPack({ review: { [objectKeyToken]: 'ok' } }), 'blocked_unsafe_key_name:root.review.<unsafe_key>', objectKeyToken]
+]) {
+  const report = validateV1ActivationPack(pack);
+  if (report.ok || !report.blockers.includes(expectedBlocker)) fail(`object key public-safety fixture did not fail: ${expectedBlocker}`);
+  const outputs = [
+    report,
+    runActivationDoctor({ root, activationPack: pack }),
+    buildDryRunActivationPlan(pack),
+    buildLocalWorkspaceSkeleton(pack),
+    buildActivationEvidencePack(pack),
+    buildConsoleHandoffSummary(pack)
+  ];
+  if (outputs.some((output) => JSON.stringify(output).includes(raw))) fail('object key unsafe material leaked into public output');
+  try {
+    buildActivationRunnerWritableFiles(pack, { root });
+    fail('writer serialized pack with unsafe object key');
+  } catch (error) {
+    if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`writer must block unsafe object key pack, got ${error.name}`);
+    if (error.message.includes(raw)) fail('writer leaked unsafe object key material in error');
+  }
+}
+
+const unknownFieldReport = validateV1ActivationPack(buildDefaultV1ActivationPack({ extraOperatorPayload: 'ok' }));
+if (unknownFieldReport.ok || !unknownFieldReport.blockers.includes('unknown_activation_pack_field:root.extraOperatorPayload')) fail('unknown top-level activation pack field did not fail closed');
+try {
+  buildCanonicalPublicV1ActivationPack(buildDefaultV1ActivationPack({ extraOperatorPayload: 'ok' }));
+  fail('canonical pack builder accepted unknown top-level field');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`canonical pack builder must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+}
+
 const unsafePublicRef = 'https://unsafe.example/activation/raw-id';
 const unsafePublicRefPack = buildDefaultV1ActivationPack({
   activationPackId: unsafePublicRef,
@@ -329,9 +385,10 @@ const bookingSnakeKey = ['booking', '_', 'created'].join('');
 const providerEndpointKey = ['provider', '_', 'endpoint'].join('');
 for (const [key, value] of [[liveSnakeKey, true], [bookingSnakeKey, true], [providerEndpointKey, 'provider_placeholder']]) {
   const report = validateV1ActivationPack(buildDefaultV1ActivationPack({ nestedLiveSurface: [{ [key]: value }] }));
-  if (report.ok || !report.blockers.includes(`blocked_assertive_live_field:root.nestedLiveSurface.0.${key}`)) {
+  if (report.ok || !report.blockers.includes('blocked_assertive_live_field:root.nestedLiveSurface.0.<unsafe_key>')) {
     fail(`normalized live/assertive key fixture did not fail: ${key}`);
   }
+  if (JSON.stringify(report).includes(key)) fail(`normalized live/assertive key leaked into validation report: ${key}`);
 }
 
 const missingBoundaryReport = validateV1ActivationPack(buildDefaultV1ActivationPack({ boundaries: { noLiveExecution: false } }));
@@ -364,6 +421,38 @@ assertNoForbiddenClaims(JSON.stringify(evidencePackA), 'generated evidence pack'
 const writableFiles = buildActivationRunnerWritableFiles(validPack, { root, doctorReport });
 for (const expected of V1_ACTIVATION_RUNNER_WRITABLE_FILES) {
   if (!Object.hasOwn(writableFiles, expected)) fail(`writable output missing file: ${expected}`);
+}
+const canonicalPack = buildCanonicalPublicV1ActivationPack(validPack);
+const emittedActivationPack = JSON.parse(writableFiles['activation-pack.public.json']);
+if (JSON.stringify(emittedActivationPack) !== JSON.stringify(canonicalPack)) fail('writer emitted non-canonical activation pack');
+for (const key of Object.keys(emittedActivationPack)) {
+  if (!['activationPackId', 'tenantDraftId', 'workspaceRef', 'organizationRef', 'template', 'vertical', 'planPath', 'activationMode', 'runtimeMode', 'launcherMode', 'requestedChannels', 'boundaries', 'safetyFlags', 'generatedAt', 'publicSafe'].includes(key)) {
+    fail(`canonical activation pack emitted unexpected key: ${key}`);
+  }
+}
+const overrideEmail = ['person', 'example.invalid'].join('@');
+for (const doctorOverride of [
+  { status: 'passed', checks: [{ checkId: 'provider_health', status: 'passed', details: { customerEmail: `[${overrideEmail}](mailto:${overrideEmail})` } }], blockedReasonCodes: [], publicSafe: true },
+  { status: 'passed', checks: [{ checkId: 'provider_health', status: 'passed', details: { accessToken: 'abc12345678' } }], blockedReasonCodes: [], publicSafe: true },
+  { status: 'passed', checks: [{ checkId: 'provider_health', status: 'passed', details: { providerUrl: ['ht', 'tps://provider.example'].join('') } }], blockedReasonCodes: [], publicSafe: true }
+]) {
+  try {
+    buildActivationRunnerWritableFiles(validPack, { root, doctorReport: doctorOverride });
+    fail('writer accepted unsafe doctor report override');
+  } catch (error) {
+    if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`doctor override must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+    if (/person|abc12345678|provider\.example|accessToken|customerEmail|providerUrl/.test(error.message)) fail('doctor override error leaked raw unsafe material');
+  }
+}
+const guardEmail = ['guard', 'example.invalid'].join('@');
+const guardIssues = collectUnsafePublicMaterial({ details: { [`[${guardEmail}](mailto:${guardEmail})`]: 'ok' } });
+if (!guardIssues.includes('blocked_unsafe_key_name:root.details.<unsafe_key>')) fail('public material scanner did not detect unsafe object key');
+try {
+  assertPublicSafeOutput({ details: { customerEmail: guardEmail } }, 'validator_self_check');
+  fail('public output final guard accepted unsafe object');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`public output guard must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (error.message.includes(guardEmail)) fail('public output guard leaked raw unsafe value');
 }
 const writableText = Object.values(writableFiles).join('\n');
 for (const pattern of secretPatterns) if (pattern.test(writableText)) fail(`writable output contains secret-shaped material: ${pattern}`);

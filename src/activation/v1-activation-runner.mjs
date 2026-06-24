@@ -65,6 +65,94 @@ const REQUIRED_TRUE_FLAGS = [
   'dryRunIsNotPermission',
   'publicSafe'
 ];
+const REQUIRED_TRUE_FLAG_SET = new Set(REQUIRED_TRUE_FLAGS);
+const CANONICAL_ACTIVATION_PACK_FIELDS = [
+  'activationPackId',
+  'tenantDraftId',
+  'workspaceRef',
+  'organizationRef',
+  'template',
+  'vertical',
+  'planPath',
+  'activationMode',
+  'runtimeMode',
+  'launcherMode',
+  'requestedChannels',
+  'boundaries',
+  'safetyFlags',
+  'generatedAt',
+  'publicSafe'
+];
+const CANONICAL_ACTIVATION_PACK_FIELD_SET = new Set(CANONICAL_ACTIVATION_PACK_FIELDS);
+const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
+  ...CANONICAL_ACTIVATION_PACK_FIELDS,
+  ...REQUIRED_TRUE_FLAGS,
+  'activationEvidencePackId',
+  'activationPackFingerprint',
+  'activationReadiness',
+  'activationStatus',
+  'blockedLiveDisabledReasonCodes',
+  'blockedReasonCodes',
+  'blockers',
+  'boundaryStatus',
+  'calendarBooking',
+  'checkId',
+  'checkedInvariants',
+  'checks',
+  'checksum',
+  'consoleHandoffSummary',
+  'containsSecrets',
+  'dadRef',
+  'deterministic',
+  'deterministicActionDossier',
+  'details',
+  'doctorReportId',
+  'doctorStatus',
+  'dryRunPlan',
+  'dryRunPlanId',
+  'dryRunStatus',
+  'evidenceExpected',
+  'evidencePackReady',
+  'executionAuthority',
+  'explicitBoundaries',
+  'files',
+  'generatedArtifacts',
+  'ignoredOutputRoot',
+  'label',
+  'lastDryRunSummary',
+  'launcherStatus',
+  'launcherStatusSummary',
+  'localWorkspaceId',
+  'localWorkspacePrepared',
+  'localWorkspaceSkeleton',
+  'noBookingWasCreated',
+  'noOutboundMessageWasSent',
+  'noPaymentWasCaptured',
+  'noProviderWasCalled',
+  'noProvisioningWasPerformed',
+  'noSecretsIncluded',
+  'ok',
+  'outboundMessaging',
+  'path',
+  'paymentCapture',
+  'providerCommissioningRequired',
+  'providerConnection',
+  'provisioning',
+  'publicReasonCodes',
+  'purpose',
+  'reasonCodes',
+  'runtimeAuthorityRequired',
+  'runtimeCommissioningRequired',
+  'runtimeRemainsAuthority',
+  'status',
+  'stepCount',
+  'stepId',
+  'steps',
+  'validationReport',
+  'validationStatus',
+  'warnings',
+  'workspaceSkeleton'
+]);
 const LIVE_ENDPOINT_PATTERN = /\b(?:https?:\/\/|wss?:\/\/|ftp:\/\/)/i;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_PATTERN = /(?:\+\d[\d .-]{7,}\d|\b\d{3}[-. ]\d{3}[-. ]\d{3,4}\b)/;
@@ -96,6 +184,25 @@ const NONEMPTY_ASSERTIVE_KEYS = new Set([
   'paymentIntent',
   'customerEmail',
   'customerPhone'
+]);
+const PUBLIC_PAYLOAD_KEY_NAMES = new Set([
+  'providerEndpoint',
+  'providerUrl',
+  'providerDetails',
+  'providerPayload',
+  'providerCredential',
+  'providerCredentials',
+  'checkoutUrl',
+  'paymentIntent',
+  'paymentMethod',
+  'paymentPayload',
+  'customerEmail',
+  'customerPhone',
+  'customerContact',
+  'customerPayload',
+  'contactEmail',
+  'contactPhone',
+  'contactPayload'
 ]);
 const SENSITIVE_KEY_NAMES = new Set([
   ['api', 'key'],
@@ -154,6 +261,8 @@ function normalizeKeyName(key) {
 
 const NORMALIZED_LIVE_ASSERTIVE_KEYS = new Set([...LIVE_ASSERTIVE_KEYS].map(normalizeKeyName));
 const NORMALIZED_NONEMPTY_ASSERTIVE_KEYS = new Set([...NONEMPTY_ASSERTIVE_KEYS].map(normalizeKeyName));
+const NORMALIZED_PUBLIC_PAYLOAD_KEY_NAMES = new Set([...PUBLIC_PAYLOAD_KEY_NAMES].map(normalizeKeyName));
+const NORMALIZED_CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([...CANONICAL_PUBLIC_OUTPUT_KEYS].map(normalizeKeyName));
 
 function safeRefOrInvalid(value, fallback) {
   return typeof value === 'string' && SAFE_REF.test(value) ? value : fallback;
@@ -187,6 +296,26 @@ function hasNonEmptyPublicValue(value) {
   return Boolean(value);
 }
 
+function isUnsafeKeyMaterial(key) {
+  const text = String(key ?? '');
+  return LIVE_ENDPOINT_PATTERN.test(text) || EMAIL_PATTERN.test(text) || PHONE_PATTERN.test(text) || SECRET_VALUE_PATTERN.test(text);
+}
+
+function safePathForKey(path, key, forceUnsafe = false) {
+  const text = String(key ?? '');
+  if (forceUnsafe || isUnsafeKeyMaterial(text) || !/^[A-Za-z0-9_-]{1,100}$/.test(text)) return `${path}.<unsafe_key>`;
+  return `${path}.${text}`;
+}
+
+function isUnsafePublicKeyName(key) {
+  const normalizedKey = normalizeKeyName(key);
+  return isUnsafeKeyMaterial(key)
+    || SENSITIVE_KEY_NAMES.has(normalizedKey)
+    || NORMALIZED_LIVE_ASSERTIVE_KEYS.has(normalizedKey)
+    || NORMALIZED_NONEMPTY_ASSERTIVE_KEYS.has(normalizedKey)
+    || NORMALIZED_PUBLIC_PAYLOAD_KEY_NAMES.has(normalizedKey);
+}
+
 function validateSafeRef(issues, path, value) {
   if (typeof value !== 'string' || !SAFE_REF.test(value)) addIssue(issues, `invalid_safe_ref:${path}`);
 }
@@ -195,7 +324,7 @@ function validateAllowed(issues, path, value, allowed) {
   if (typeof value !== 'string' || !allowed.has(value)) addIssue(issues, `invalid_allowed_value:${path}`);
 }
 
-function collectUnsafeStrings(value, path = 'root', issues = []) {
+export function collectUnsafePublicMaterial(value, path = 'root', issues = [], options = {}) {
   if (typeof value === 'string') {
     if (LIVE_ENDPOINT_PATTERN.test(value)) addIssue(issues, `blocked_live_endpoint:${path}`);
     if (EMAIL_PATTERN.test(value) || PHONE_PATTERN.test(value)) addIssue(issues, `blocked_pii_like_value:${path}`);
@@ -203,42 +332,46 @@ function collectUnsafeStrings(value, path = 'root', issues = []) {
     return issues;
   }
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => collectUnsafeStrings(entry, `${path}.${index}`, issues));
+    value.forEach((entry, index) => collectUnsafePublicMaterial(entry, `${path}.${index}`, issues, options));
     return issues;
   }
   if (value && typeof value === 'object') {
-    for (const [key, entry] of Object.entries(value)) collectUnsafeStrings(entry, `${path}.${key}`, issues);
+    for (const [key, entry] of Object.entries(value)) {
+      const normalizedKey = normalizeKeyName(key);
+      const keyIsSensitive = SENSITIVE_KEY_NAMES.has(normalizedKey);
+      const keyIsUnsafe = isUnsafePublicKeyName(key);
+      const keyPath = safePathForKey(path, key, keyIsUnsafe);
+      const isCanonicalPublicKey = NORMALIZED_CANONICAL_PUBLIC_OUTPUT_KEYS.has(normalizedKey);
+      if (isUnsafeKeyMaterial(key)) addIssue(issues, `blocked_unsafe_key_name:${keyPath}`);
+      if (keyIsSensitive) addIssue(issues, `blocked_sensitive_key_name:${keyPath}`);
+      if (NORMALIZED_LIVE_ASSERTIVE_KEYS.has(normalizedKey) && entry) addIssue(issues, `blocked_assertive_live_field:${keyPath}`);
+      if (NORMALIZED_NONEMPTY_ASSERTIVE_KEYS.has(normalizedKey) && hasNonEmptyPublicValue(entry)) addIssue(issues, `blocked_assertive_live_field:${keyPath}`);
+      if (!isCanonicalPublicKey && NORMALIZED_PUBLIC_PAYLOAD_KEY_NAMES.has(normalizedKey) && hasNonEmptyPublicValue(entry)) {
+        addIssue(issues, `blocked_public_payload_key_name:${keyPath}`);
+      }
+      if (options.blockUnknownKeys === true && options.allowedKeys && !options.allowedKeys.has(key)) {
+        addIssue(issues, `blocked_unknown_public_output_key:${safePathForKey(path, key, keyIsUnsafe)}`);
+      }
+      collectUnsafePublicMaterial(entry, keyPath, issues, options);
+    }
   }
   return issues;
 }
 
-function collectSensitiveKeyNames(value, path = 'root', issues = []) {
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => collectSensitiveKeyNames(entry, `${path}.${index}`, issues));
-    return issues;
+function collectUnknownActivationPackFields(pack, issues) {
+  for (const key of Object.keys(pack)) {
+    if (!CANONICAL_ACTIVATION_PACK_FIELD_SET.has(key)) addIssue(issues, `unknown_activation_pack_field:${safePathForKey('root', key, isUnsafePublicKeyName(key))}`);
   }
-  if (!value || typeof value !== 'object') return issues;
-  for (const [key, entry] of Object.entries(value)) {
-    const nextPath = `${path}.${key}`;
-    if (SENSITIVE_KEY_NAMES.has(normalizeKeyName(key))) addIssue(issues, `blocked_sensitive_key_name:${nextPath}`);
-    collectSensitiveKeyNames(entry, nextPath, issues);
+  for (const field of ['boundaries', 'safetyFlags']) {
+    const value = pack[field];
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      addIssue(issues, `activation_pack_${field}_must_be_object`);
+      continue;
+    }
+    for (const key of Object.keys(value)) {
+      if (!REQUIRED_TRUE_FLAG_SET.has(key)) addIssue(issues, `unknown_activation_pack_field:${safePathForKey(`root.${field}`, key, isUnsafePublicKeyName(key))}`);
+    }
   }
-  return issues;
-}
-
-function collectForbiddenAssertiveKeys(value, path = 'root', issues = []) {
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => collectForbiddenAssertiveKeys(entry, `${path}.${index}`, issues));
-    return issues;
-  }
-  if (!value || typeof value !== 'object') return issues;
-  for (const [key, entry] of Object.entries(value)) {
-    const normalizedKey = normalizeKeyName(key);
-    if (NORMALIZED_LIVE_ASSERTIVE_KEYS.has(normalizedKey) && entry) addIssue(issues, `blocked_assertive_live_field:${path}.${key}`);
-    if (NORMALIZED_NONEMPTY_ASSERTIVE_KEYS.has(normalizedKey) && hasNonEmptyPublicValue(entry)) addIssue(issues, `blocked_assertive_live_field:${path}.${key}`);
-    collectForbiddenAssertiveKeys(entry, `${path}.${key}`, issues);
-  }
-  return issues;
 }
 
 export function computeActivationRunnerDigest(value) {
@@ -303,6 +436,7 @@ export function validateV1ActivationPack(pack = buildDefaultV1ActivationPack()) 
     };
   }
 
+  collectUnknownActivationPackFields(pack, blockers);
   validateSafeRef(blockers, 'activationPackId', pack.activationPackId);
   validateSafeRef(blockers, 'tenantDraftId', pack.tenantDraftId);
   validateSafeRef(blockers, 'workspaceRef', pack.workspaceRef);
@@ -330,9 +464,7 @@ export function validateV1ActivationPack(pack = buildDefaultV1ActivationPack()) 
     if (pack.safetyFlags?.[flag] !== true) addIssue(blockers, `missing_safety_flag:${flag}`);
   }
 
-  for (const issue of collectUnsafeStrings(pack)) addIssue(blockers, issue);
-  for (const issue of collectSensitiveKeyNames(pack)) addIssue(blockers, issue);
-  for (const issue of collectForbiddenAssertiveKeys(pack)) addIssue(blockers, issue);
+  for (const issue of collectUnsafePublicMaterial(pack)) addIssue(blockers, issue);
 
   const ok = blockers.length === 0;
   return {
@@ -359,14 +491,44 @@ export function validateV1ActivationPack(pack = buildDefaultV1ActivationPack()) 
   };
 }
 
+function buildCanonicalFlagObject(value) {
+  return Object.fromEntries(REQUIRED_TRUE_FLAGS.map((flag) => [flag, value?.[flag] === true]));
+}
+
+export function buildCanonicalPublicV1ActivationPack(pack = buildDefaultV1ActivationPack()) {
+  const validationReport = validateV1ActivationPack(pack);
+  if (!validationReport.ok) throw new ActivationRunnerWriteBlockedError(validationReport.blockers);
+  return assertPublicSafeOutput({
+    activationPackId: pack.activationPackId,
+    tenantDraftId: pack.tenantDraftId,
+    workspaceRef: pack.workspaceRef,
+    organizationRef: pack.organizationRef,
+    template: pack.template,
+    vertical: pack.vertical,
+    planPath: pack.planPath,
+    activationMode: pack.activationMode,
+    runtimeMode: pack.runtimeMode,
+    launcherMode: pack.launcherMode,
+    requestedChannels: [...pack.requestedChannels],
+    boundaries: buildCanonicalFlagObject(pack.boundaries),
+    safetyFlags: buildCanonicalFlagObject(pack.safetyFlags),
+    generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
+    publicSafe: true
+  }, 'activation-pack.public.json');
+}
+
 export function computeActivationPackFingerprint(pack = buildDefaultV1ActivationPack()) {
-  return computeActivationRunnerDigest({ activationPack: pack });
+  const validationReport = validateV1ActivationPack(pack);
+  const activationPack = validationReport.ok
+    ? buildCanonicalPublicV1ActivationPack(pack)
+    : { status: validationReport.status, activationPackId: buildPublicPackRefs(pack, validationReport).activationPackId, publicSafe: true };
+  return computeActivationRunnerDigest({ activationPack });
 }
 
 export function buildLocalWorkspaceSkeleton(pack = buildDefaultV1ActivationPack()) {
   const validationReport = validateV1ActivationPack(pack);
   const publicRefs = buildPublicPackRefs(pack, validationReport);
-  return {
+  return assertPublicSafeOutput({
     localWorkspaceId: buildSafeDerivedId('local_workspace', publicRefs.workspaceRef, 'invalid_workspace'),
     activationPackId: publicRefs.activationPackId,
     status: validationReport.ok ? 'workspace_skeleton_prepared' : 'workspace_skeleton_blocked',
@@ -382,7 +544,7 @@ export function buildLocalWorkspaceSkeleton(pack = buildDefaultV1ActivationPack(
     boundaries: buildPublicBoundaryStatus(pack),
     generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
     publicSafe: true
-  };
+  }, 'local-workspace-skeleton.public.json');
 }
 
 export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack()) {
@@ -447,7 +609,7 @@ export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack())
     }
   ];
 
-  return {
+  return assertPublicSafeOutput({
     dryRunPlanId: buildSafeDerivedId('dry_run_plan', publicRefs.activationPackId, 'invalid_activation_pack'),
     activationPackId: publicRefs.activationPackId,
     status: dryRunStatus,
@@ -458,13 +620,13 @@ export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack())
     runtimeAuthorityRequired: true,
     generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
     publicSafe: true
-  };
+  }, 'dry-run-plan.public.json');
 }
 
 export function buildConsoleHandoffSummary(pack = buildDefaultV1ActivationPack()) {
   const validationReport = validateV1ActivationPack(pack);
   const dryRunPlan = buildDryRunActivationPlan(pack);
-  return {
+  return assertPublicSafeOutput({
     launcherStatus: validationReport.ok ? 'activation_prepared_for_review' : 'activation_blocked',
     activationReadiness: validationReport.ok ? 'dry_run_ready_no_live_execution' : 'blocked_invalid_activation_pack',
     doctorStatus: 'doctor_required_before_handoff',
@@ -492,7 +654,7 @@ export function buildConsoleHandoffSummary(pack = buildDefaultV1ActivationPack()
     },
     generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
     publicSafe: true
-  };
+  }, 'console-handoff-summary.public.json');
 }
 
 function readPackageJson(root) {
@@ -522,7 +684,10 @@ export function runActivationDoctor(options = {}) {
   const dryRunPlan = buildDryRunActivationPlan(pack);
   const workspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
   const generatedSurface = { validationReport, dryRunPlan, workspaceSkeleton, consoleHandoffSummary: buildConsoleHandoffSummary(pack) };
-  const unsafeGeneratedIssues = collectUnsafeStrings(generatedSurface);
+  const unsafeGeneratedIssues = collectUnsafePublicMaterial(generatedSurface, 'root', [], {
+    allowedKeys: CANONICAL_PUBLIC_OUTPUT_KEYS,
+    blockUnknownKeys: true
+  });
   const checks = [];
 
   const requiredStructure = ['package.json', 'scripts', 'src/activation', 'docs'];
@@ -546,20 +711,27 @@ export function runActivationDoctor(options = {}) {
   checks.push(makeDoctorCheck('no_runtime_execution_enabled', pack.boundaries?.noLiveExecution === true && pack.runtimeMode === 'runtime_authority_required', pack.boundaries?.noLiveExecution === true ? ['no_live_execution', 'runtime_authority_required'] : ['runtime_execution_not_disabled']));
 
   const blocked = checks.filter((check) => check.status === 'blocked');
-  return {
+  return assertPublicSafeOutput({
     doctorReportId: buildSafeDerivedId('doctor_report', publicRefs.activationPackId, 'invalid_activation_pack'),
     status: blocked.length ? 'blocked' : 'passed',
     checks,
     blockedReasonCodes: blocked.flatMap((check) => check.reasonCodes),
     generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
     publicSafe: true
-  };
+  }, 'doctor-report.public.json');
+}
+
+const ALLOWED_DOCTOR_STATUSES = new Set(['passed', 'blocked', 'not_run']);
+
+function normalizeDoctorStatus(status) {
+  return ALLOWED_DOCTOR_STATUSES.has(status) ? status : 'blocked';
 }
 
 export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(), options = {}) {
   const validationReport = options.validationReport ?? validateV1ActivationPack(pack);
   const publicRefs = buildPublicPackRefs(pack, validationReport);
   const doctorReport = options.doctorReport ?? { status: 'not_run', checks: [], blockedReasonCodes: ['doctor_not_run'], publicSafe: true };
+  const doctorStatus = normalizeDoctorStatus(doctorReport.status);
   const dryRunPlan = options.dryRunPlan ?? buildDryRunActivationPlan(pack);
   const localWorkspaceSkeleton = options.localWorkspaceSkeleton ?? buildLocalWorkspaceSkeleton(pack);
   const consoleHandoffSummary = options.consoleHandoffSummary ?? buildConsoleHandoffSummary(pack);
@@ -574,11 +746,11 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
     noSecretsIncluded: true
   };
 
-  return {
+  return assertPublicSafeOutput({
     activationEvidencePackId: buildSafeDerivedId('activation_evidence_pack', publicRefs.activationPackId, 'invalid_activation_pack'),
     activationPackId: publicRefs.activationPackId,
     activationPackFingerprint: computeActivationPackFingerprint(pack),
-    doctorStatus: doctorReport.status,
+    doctorStatus,
     dryRunStatus: dryRunPlan.status,
     boundaryStatus,
     generatedArtifacts: V1_ACTIVATION_RUNNER_WRITABLE_FILES.map((path) => ({ path, publicSafe: true, deterministic: true })),
@@ -597,8 +769,8 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
     launcherStatusSummary: {
       launcherStatus: consoleHandoffSummary.launcherStatus,
       activationReadiness: consoleHandoffSummary.activationReadiness,
-      doctorStatus: doctorReport.status,
-      evidencePackReady: validationReport.ok && doctorReport.status === 'passed',
+      doctorStatus,
+      evidencePackReady: validationReport.ok && doctorStatus === 'passed',
       localWorkspacePrepared: localWorkspaceSkeleton.status === 'workspace_skeleton_prepared',
       runtimeCommissioningRequired: true,
       providerCommissioningRequired: true,
@@ -623,7 +795,7 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
     validationReport,
     generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
     publicSafe: true
-  };
+  }, 'activation-evidence-pack.public.json');
 }
 
 export class ActivationRunnerWriteBlockedError extends Error {
@@ -635,8 +807,31 @@ export class ActivationRunnerWriteBlockedError extends Error {
   }
 }
 
+export function assertPublicSafeOutput(value, context = 'public_output') {
+  const issues = collectUnsafePublicMaterial(value, 'root', [], {
+    allowedKeys: CANONICAL_PUBLIC_OUTPUT_KEYS,
+    blockUnknownKeys: true
+  });
+  if (issues.length) {
+    throw new ActivationRunnerWriteBlockedError(issues.map((issue) => `blocked_public_output:${context}:${issue}`));
+  }
+  return value;
+}
+
+function validateDoctorReportOverride(doctorReport) {
+  if (typeof doctorReport === 'undefined') return [];
+  return collectUnsafePublicMaterial(doctorReport, 'root.doctorReport', [], {
+    allowedKeys: CANONICAL_PUBLIC_OUTPUT_KEYS,
+    blockUnknownKeys: true
+  });
+}
+
 function publicJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function publicJsonOutput(filename, value) {
+  return publicJson(assertPublicSafeOutput(value, filename));
 }
 
 function assertInside(root, target) {
@@ -647,7 +842,7 @@ function assertInside(root, target) {
 }
 
 function buildWorkspaceConfig(pack) {
-  return {
+  return assertPublicSafeOutput({
     activationPackId: pack.activationPackId,
     workspaceRef: pack.workspaceRef,
     launcherMode: pack.launcherMode,
@@ -658,43 +853,47 @@ function buildWorkspaceConfig(pack) {
     paymentCapture: 'disabled',
     provisioning: 'disabled',
     publicSafe: true
-  };
+  }, 'workspace/config/launcher.config.public.json');
 }
 
 function buildActivationStatus(pack, validationReport) {
-  return {
+  return assertPublicSafeOutput({
     activationPackId: pack.activationPackId,
     status: validationReport.ok ? 'prepared_for_dry_run' : 'blocked',
     noLiveExecution: true,
     runtimeAuthorityRequired: true,
     providerCommissioningRequired: true,
     publicSafe: true
-  };
+  }, 'workspace/status/activation-status.public.json');
 }
 
 export function buildActivationRunnerWritableFiles(pack = buildDefaultV1ActivationPack(), options = {}) {
   const validationReport = validateV1ActivationPack(pack);
   if (!validationReport.ok) throw new ActivationRunnerWriteBlockedError(validationReport.blockers);
-  const doctorReport = options.doctorReport ?? runActivationDoctor({ root: options.root ?? process.cwd(), activationPack: pack });
+  const overrideIssues = validateDoctorReportOverride(options.doctorReport);
+  if (overrideIssues.length) throw new ActivationRunnerWriteBlockedError(overrideIssues.map((issue) => `blocked_doctor_report_override:${issue}`));
+  const canonicalPack = buildCanonicalPublicV1ActivationPack(pack);
+  const doctorReport = runActivationDoctor({ root: options.root ?? process.cwd(), activationPack: canonicalPack });
   if (doctorReport.status !== 'passed') throw new ActivationRunnerWriteBlockedError(doctorReport.blockedReasonCodes ?? ['doctor_blocked']);
-  const dryRunPlan = buildDryRunActivationPlan(pack);
-  const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
-  const consoleHandoffSummary = buildConsoleHandoffSummary(pack);
-  const activationEvidencePack = buildActivationEvidencePack(pack, { validationReport, doctorReport, dryRunPlan, localWorkspaceSkeleton, consoleHandoffSummary });
+  const dryRunPlan = buildDryRunActivationPlan(canonicalPack);
+  const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(canonicalPack);
+  const consoleHandoffSummary = buildConsoleHandoffSummary(canonicalPack);
+  const activationEvidencePack = buildActivationEvidencePack(canonicalPack, { validationReport, doctorReport, dryRunPlan, localWorkspaceSkeleton, consoleHandoffSummary });
+  const readme = `# Capsule Launcher v1 Activation Runner\n\nPublic-safe deterministic activation output. This output is a dry-run evidence and handoff package only. It does not call providers, create bookings, capture payment, send outbound messages, provision runtime state or grant live permission.\n\nActivation pack fingerprint: ${activationEvidencePack.activationPackFingerprint}\n`;
   const files = {
-    'README_ACTIVATION_RUNNER.md': `# Capsule Launcher v1 Activation Runner\n\nPublic-safe deterministic activation output. This output is a dry-run evidence and handoff package only. It does not call providers, create bookings, capture payment, send outbound messages, provision runtime state or grant live permission.\n\nActivation pack fingerprint: ${activationEvidencePack.activationPackFingerprint}\n`,
-    'activation-pack.public.json': publicJson(pack),
-    'doctor-report.public.json': publicJson(doctorReport),
-    'dry-run-plan.public.json': publicJson(dryRunPlan),
-    'activation-evidence-pack.public.json': publicJson(activationEvidencePack),
-    'console-handoff-summary.public.json': publicJson(consoleHandoffSummary),
-    'local-workspace-skeleton.public.json': publicJson(localWorkspaceSkeleton),
-    'workspace/config/launcher.config.public.json': publicJson(buildWorkspaceConfig(pack)),
-    'workspace/status/activation-status.public.json': publicJson(buildActivationStatus(pack, validationReport)),
-    'workspace/status/doctor-status.public.json': publicJson({ doctorReportId: doctorReport.doctorReportId, status: doctorReport.status, publicSafe: true }),
-    'workspace/plans/dry-run-plan.public.json': publicJson(dryRunPlan),
-    'workspace/evidence/activation-evidence-pack.public.json': publicJson(activationEvidencePack),
-    'workspace/handoff/console-handoff-summary.public.json': publicJson(consoleHandoffSummary)
+    'README_ACTIVATION_RUNNER.md': assertPublicSafeOutput(readme, 'README_ACTIVATION_RUNNER.md'),
+    'activation-pack.public.json': publicJsonOutput('activation-pack.public.json', canonicalPack),
+    'doctor-report.public.json': publicJsonOutput('doctor-report.public.json', doctorReport),
+    'dry-run-plan.public.json': publicJsonOutput('dry-run-plan.public.json', dryRunPlan),
+    'activation-evidence-pack.public.json': publicJsonOutput('activation-evidence-pack.public.json', activationEvidencePack),
+    'console-handoff-summary.public.json': publicJsonOutput('console-handoff-summary.public.json', consoleHandoffSummary),
+    'local-workspace-skeleton.public.json': publicJsonOutput('local-workspace-skeleton.public.json', localWorkspaceSkeleton),
+    'workspace/config/launcher.config.public.json': publicJsonOutput('workspace/config/launcher.config.public.json', buildWorkspaceConfig(canonicalPack)),
+    'workspace/status/activation-status.public.json': publicJsonOutput('workspace/status/activation-status.public.json', buildActivationStatus(canonicalPack, validationReport)),
+    'workspace/status/doctor-status.public.json': publicJsonOutput('workspace/status/doctor-status.public.json', { doctorReportId: doctorReport.doctorReportId, status: doctorReport.status, publicSafe: true }),
+    'workspace/plans/dry-run-plan.public.json': publicJsonOutput('workspace/plans/dry-run-plan.public.json', dryRunPlan),
+    'workspace/evidence/activation-evidence-pack.public.json': publicJsonOutput('workspace/evidence/activation-evidence-pack.public.json', activationEvidencePack),
+    'workspace/handoff/console-handoff-summary.public.json': publicJsonOutput('workspace/handoff/console-handoff-summary.public.json', consoleHandoffSummary)
   };
   const expected = new Set(V1_ACTIVATION_RUNNER_WRITABLE_FILES);
   for (const filename of Object.keys(files)) {
@@ -706,14 +905,15 @@ export function buildActivationRunnerWritableFiles(pack = buildDefaultV1Activati
 export function buildActivationRunnerDryRunWritableFiles(pack = buildDefaultV1ActivationPack()) {
   const validationReport = validateV1ActivationPack(pack);
   if (!validationReport.ok) throw new ActivationRunnerWriteBlockedError(validationReport.blockers);
-  const dryRunPlan = buildDryRunActivationPlan(pack);
-  const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
+  const canonicalPack = buildCanonicalPublicV1ActivationPack(pack);
+  const dryRunPlan = buildDryRunActivationPlan(canonicalPack);
+  const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(canonicalPack);
   return {
-    'dry-run-plan.public.json': publicJson(dryRunPlan),
-    'local-workspace-skeleton.public.json': publicJson(localWorkspaceSkeleton),
-    'workspace/config/launcher.config.public.json': publicJson(buildWorkspaceConfig(pack)),
-    'workspace/status/activation-status.public.json': publicJson(buildActivationStatus(pack, validationReport)),
-    'workspace/plans/dry-run-plan.public.json': publicJson(dryRunPlan)
+    'dry-run-plan.public.json': publicJsonOutput('dry-run-plan.public.json', dryRunPlan),
+    'local-workspace-skeleton.public.json': publicJsonOutput('local-workspace-skeleton.public.json', localWorkspaceSkeleton),
+    'workspace/config/launcher.config.public.json': publicJsonOutput('workspace/config/launcher.config.public.json', buildWorkspaceConfig(canonicalPack)),
+    'workspace/status/activation-status.public.json': publicJsonOutput('workspace/status/activation-status.public.json', buildActivationStatus(canonicalPack, validationReport)),
+    'workspace/plans/dry-run-plan.public.json': publicJsonOutput('workspace/plans/dry-run-plan.public.json', dryRunPlan)
   };
 }
 

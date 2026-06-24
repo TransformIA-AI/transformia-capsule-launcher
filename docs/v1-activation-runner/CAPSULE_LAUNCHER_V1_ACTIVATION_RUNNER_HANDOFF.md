@@ -4,6 +4,8 @@
 
 The v1 Activation Runner creates the operational bridge between a public-safe activation pack and a later private Console preview. It stays inside the Launcher repository and produces reviewable local evidence only.
 
+All public output is canonicalized at the Launcher boundary. The runner validates untrusted operator input, rejects unknown activation-pack fields, and writes only allowlisted public shapes. Raw activation packs and caller-supplied doctor details are not serialized directly into evidence.
+
 ## What the runner does
 
 - validates a deterministic activation pack;
