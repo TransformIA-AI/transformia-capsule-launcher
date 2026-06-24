@@ -12,3 +12,4 @@ secrets
 *.key
 *.p12
 *.pfx
+.capsule-local/
