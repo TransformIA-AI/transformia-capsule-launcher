@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   buildActivationPackFileManifest,
@@ -261,7 +261,7 @@ test('writer writes only expected files for allowed Case Zero pack', () => {
   const pack = buildSaaSActivationPack(buildCaseZeroActivationIntentFixture());
   const out = tempOutputDir();
   try {
-    const files = writeSaaSActivationPack(pack, out).map((file) => file.split('/').pop()).sort();
+    const files = writeSaaSActivationPack(pack, out).map((file) => basename(file)).sort();
     assert.deepEqual(files, expectedManifest);
     assert.deepEqual(readdirSync(out).sort(), expectedManifest);
     const activationPack = JSON.parse(readFileSync(join(out, 'activation-pack.public.json'), 'utf8'));
