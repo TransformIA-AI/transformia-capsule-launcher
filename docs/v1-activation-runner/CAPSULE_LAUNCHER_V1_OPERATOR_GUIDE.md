@@ -46,6 +46,8 @@ All refs must be safe refs. No provider credentials. No customer PII. No payment
 
 The runner treats the input pack as untrusted operator input. Public outputs are built from a canonical allowlisted activation pack shape; the raw input pack is never written directly. Unknown top-level fields and unknown nested boundary or safety fields fail closed before writer serialization.
 
+`AGENTS.md` now records the current Dani-approved v1 Activation Runner gate. Evidence readiness is recomputed from canonical public surfaces, not caller-supplied override objects. Raw activation packs and raw doctor or evidence overrides are never public output authority.
+
 ## Outputs
 
 Generated output is written under `.capsule-local/v1-activation-runner`, which is ignored and must not be committed.

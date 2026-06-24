@@ -33,7 +33,8 @@ const normalize = (path) => path.replaceAll('\\', '/');
 const requiredDocs = [
   'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_ACTIVATION_RUNNER_HANDOFF.md',
   'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_CONTRACT_MATRIX.md',
-  'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_OPERATOR_GUIDE.md'
+  'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_OPERATOR_GUIDE.md',
+  'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_SCOPE_APPROVAL.md'
 ];
 const requiredScripts = [
   'scripts/capsule-activation-validate.mjs',
@@ -67,6 +68,7 @@ if (!packageJson.scripts?.test?.includes('v1-activation-runner.test.mjs')) fail(
 if (!read('.gitignore').includes('.capsule-local/')) fail('.gitignore must ignore .capsule-local/');
 
 const source = exists('src/activation/v1-activation-runner.mjs') ? read('src/activation/v1-activation-runner.mjs') : '';
+const activationRunnerTestSource = exists('src/activation/__tests__/v1-activation-runner.test.mjs') ? read('src/activation/__tests__/v1-activation-runner.test.mjs') : '';
 for (const exported of [
   'buildDefaultV1ActivationPack',
   'validateV1ActivationPack',
@@ -107,6 +109,21 @@ if (source.includes("'activation-pack.public.json': publicJson(pack)") || source
 if (!source.includes("'activation-pack.public.json': publicJsonOutput('activation-pack.public.json', canonicalPack)")) {
   fail('runner writer must serialize canonical activation pack through final guard');
 }
+if (source.includes('options.validationReport ??') || source.includes('options.dryRunPlan ??') || source.includes('options.localWorkspaceSkeleton ??') || source.includes('options.consoleHandoffSummary ??')) {
+  fail('evidence builder must recompute validation, dry-run, skeleton and handoff surfaces instead of trusting overrides');
+}
+for (const phrase of [
+  'invalid pack with fake validation report cannot mark evidence ready',
+  'invalid pack with fake passed doctor report cannot mark evidence ready',
+  'invalid pack with fake ready dry-run plan cannot propagate ready status',
+  'invalid pack with fake console handoff cannot propagate prepared launcher status',
+  'invalid pack with fake workspace skeleton cannot propagate prepared workspace',
+  'unsafe doctor report overrides cannot inject public evidence details',
+  'activation pack validation scans object keys without echoing unsafe key material',
+  'unknown activation pack fields fail closed and never reach canonical public output'
+]) {
+  if (!activationRunnerTestSource.includes(phrase)) fail(`activation runner tests missing adversarial case: ${phrase}`);
+}
 
 const docs = requiredDocs.filter(exists).map(read).join('\n');
 for (const phrase of [
@@ -125,8 +142,33 @@ for (const phrase of [
 }
 
 const prBody = exists('PR_BODY_CAPSULE_LAUNCHER_V1_ACTIVATION_RUNNER.md') ? read('PR_BODY_CAPSULE_LAUNCHER_V1_ACTIVATION_RUNNER.md') : '';
+const agents = exists('AGENTS.md') ? read('AGENTS.md') : '';
+const scopeApprovalDoc = exists('docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_SCOPE_APPROVAL.md') ? read('docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_SCOPE_APPROVAL.md') : '';
 for (const heading of ['Summary', 'What changed', 'Commands/scripts added', 'Safety boundaries', 'Tests/validators run', 'Not included', 'Risks/trade-offs', 'Follow-up recommendations']) {
   if (!prBody.includes(`## ${heading}`)) fail(`PR body missing section: ${heading}`);
+}
+if (!prBody.includes('## Exact Atlas Entry / Dani Approval')) fail('PR body must include Exact Atlas Entry / Dani Approval section');
+if (prBody.includes('26 tests')) fail('PR body contains stale 26 tests count');
+if (!/42 tests/.test(prBody)) fail('PR body must include current 42 tests count');
+for (const phrase of [
+  'v1.0-LAUNCHER-ACTIVATION-RUNNER',
+  'Dani explicitly approves',
+  'Runtime decides',
+  'Launcher prepares',
+  'Public output canonicalization rule'
+]) {
+  if (!agents.includes(phrase)) fail(`AGENTS.md missing current v1 gate phrase: ${phrase}`);
+}
+for (const phrase of [
+  'Capsule Launcher v1 Activation Runner',
+  'Dani explicitly approved',
+  'Runtime decides',
+  'Launcher prepares',
+  'Web remains separate',
+  'No Runtime changes',
+  'No Web changes'
+]) {
+  if (!scopeApprovalDoc.includes(phrase)) fail(`scope approval doc missing phrase: ${phrase}`);
 }
 
 function stripAllowedSafeClaims(text) {
@@ -146,7 +188,11 @@ function stripAllowedSafeClaims(text) {
     /\bdoes not capture payment\b/gi,
     /\bdoes not send outbound messages\b/gi,
     /\bdoes not provision runtime state\b/gi,
-    /\bnot production live\b/gi
+    /\bnot production live\b/gi,
+    /\bNever commit customer data\b/gi,
+    /\bdoes not grant rights[^.]*customer data[^.]*\./gi,
+    /\bNo customer PII\b/gi,
+    /\bautonomous execution without governance\b/gi
   ]) {
     next = next.replace(pattern, '');
   }
@@ -262,18 +308,19 @@ for (const file of changed) {
   if (file === '.env' || (file.startsWith('.env.') && file !== '.env.example')) fail(`forbidden env file changed: ${file}`);
   if (!exists(file)) continue;
   const isValidatorSelf = file === 'scripts/validate-v1-activation-runner.mjs';
+  const isValidatorScript = file.startsWith('scripts/validate-');
   const text = read(file);
   const forbiddenShortName = new RegExp(`\\b${'D' + 'AF'}\\b`);
   const forbiddenLegacyName = new RegExp(`\\b(?:${'CL' + 'AW'}|${'HER' + 'MES'})\\b`, 'i');
-  if (!isValidatorSelf && forbiddenShortName.test(text)) fail(`forbidden DAD typo term found: ${file}`);
-  if (!isValidatorSelf && forbiddenLegacyName.test(text)) fail(`forbidden legacy local name found: ${file}`);
+  if (!isValidatorScript && forbiddenShortName.test(text)) fail(`forbidden DAD typo term found: ${file}`);
+  if (!isValidatorScript && forbiddenLegacyName.test(text)) fail(`forbidden legacy local name found: ${file}`);
   const externalTerms = ['fe' + 'tch(', 'ax' + 'ios', 'su' + 'pabase', 'fi' + 'rebase', 'post' + 'gres', 'my' + 'sql', 'mongo' + 'db'];
-  if (!isValidatorSelf && externalTerms.some((term) => text.toLowerCase().includes(term))) fail(`changed file introduces external implementation surface: ${file}`);
-  if (!file.includes('__tests__/') && !isValidatorSelf) {
+  if (!isValidatorScript && externalTerms.some((term) => text.toLowerCase().includes(term))) fail(`changed file introduces external implementation surface: ${file}`);
+  if (!file.includes('__tests__/') && !isValidatorScript) {
     for (const pattern of secretPatterns) if (pattern.test(text)) fail(`changed file contains secret-shaped material: ${file}`);
     for (const pattern of piiPatterns) if (pattern.test(text)) fail(`changed file contains PII-shaped material: ${file}`);
   }
-  if (!isValidatorSelf) assertNoForbiddenClaims(text, file);
+  if (!isValidatorScript) assertNoForbiddenClaims(text, file);
 }
 
 assertNoForbiddenClaims(docs, 'docs/v1-activation-runner');
@@ -353,6 +400,51 @@ const unsafePublicRefOutputs = [
 for (const output of unsafePublicRefOutputs) {
   if (JSON.stringify(output).includes(unsafePublicRef)) fail('unsafe activation ref leaked into public output');
 }
+
+function assertInvalidEvidenceOverrideDoesNotBecomeReady(label, pack, options, rawValues = []) {
+  const evidence = buildActivationEvidencePack(pack, options);
+  const text = JSON.stringify(evidence);
+  if (evidence.validationReport.ok !== false) fail(`${label}: invalid pack was not reflected in evidence validation report`);
+  if (evidence.launcherStatusSummary.evidencePackReady !== false) fail(`${label}: fake override marked evidence ready`);
+  if (evidence.dryRunStatus === 'dry_run_ready_no_live_execution') fail(`${label}: fake override propagated dry-run ready status`);
+  if (evidence.consoleHandoffSummary.launcherStatus === 'activation_prepared_for_review') fail(`${label}: fake override propagated prepared launcher status`);
+  if (evidence.launcherStatusSummary.localWorkspacePrepared === true) fail(`${label}: fake override propagated prepared workspace`);
+  if (evidence.doctorStatus === 'passed') fail(`${label}: fake override propagated passed doctor status`);
+  for (const raw of rawValues) {
+    if (text.includes(raw)) fail(`${label}: raw unsafe override/ref leaked into evidence`);
+  }
+}
+
+assertInvalidEvidenceOverrideDoesNotBecomeReady(
+  'fake validation report',
+  buildDefaultV1ActivationPack({ activationPackId: unsafePublicRef }),
+  { validationReport: { ok: true, status: 'valid_public_safe_activation_pack', blockers: [], publicSafe: true } },
+  [unsafePublicRef]
+);
+assertInvalidEvidenceOverrideDoesNotBecomeReady(
+  'fake passed doctor report',
+  buildDefaultV1ActivationPack({ workspaceRef: unsafePublicRef }),
+  { doctorReport: { status: 'passed', checks: [], blockedReasonCodes: [], publicSafe: true } },
+  [unsafePublicRef]
+);
+assertInvalidEvidenceOverrideDoesNotBecomeReady(
+  'fake ready dry-run plan',
+  buildDefaultV1ActivationPack({ tenantDraftId: unsafePublicRef }),
+  { dryRunPlan: { dryRunPlanId: 'dry_run_plan_fake_ready', status: 'dry_run_ready_no_live_execution', steps: [], publicSafe: true } },
+  [unsafePublicRef, 'dry_run_plan_fake_ready']
+);
+assertInvalidEvidenceOverrideDoesNotBecomeReady(
+  'fake prepared handoff',
+  buildDefaultV1ActivationPack({ organizationRef: unsafePublicRef }),
+  { consoleHandoffSummary: { launcherStatus: 'activation_prepared_for_review', evidencePackReady: true, localWorkspacePrepared: true, publicSafe: true } },
+  [unsafePublicRef]
+);
+assertInvalidEvidenceOverrideDoesNotBecomeReady(
+  'fake prepared workspace',
+  buildDefaultV1ActivationPack({ workspaceRef: unsafePublicRef }),
+  { localWorkspaceSkeleton: { localWorkspaceId: 'local_workspace_fake_prepared', status: 'workspace_skeleton_prepared', publicSafe: true } },
+  [unsafePublicRef, 'local_workspace_fake_prepared']
+);
 
 const hostileBoundaryUrl = ['ht', 'tps://unsafe.example/boundary-support'].join('');
 const hostileBoundaryValue = 'abc12345678';

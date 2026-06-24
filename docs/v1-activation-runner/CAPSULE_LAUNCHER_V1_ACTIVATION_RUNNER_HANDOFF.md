@@ -6,6 +6,8 @@ The v1 Activation Runner creates the operational bridge between a public-safe ac
 
 All public output is canonicalized at the Launcher boundary. The runner validates untrusted operator input, rejects unknown activation-pack fields, and writes only allowlisted public shapes. Raw activation packs and caller-supplied doctor details are not serialized directly into evidence.
 
+`AGENTS.md` records this as the current Dani-approved v1 Launcher gate. Evidence readiness is recomputed from canonical validation, doctor, dry-run, workspace skeleton and console handoff surfaces; caller-supplied validation, doctor or evidence override objects are never public-output authority.
+
 ## What the runner does
 
 - validates a deterministic activation pack;

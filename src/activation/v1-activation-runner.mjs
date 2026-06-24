@@ -25,7 +25,8 @@ export const V1_ACTIVATION_RUNNER_REQUIRED_FILES = [
   'scripts/validate-v1-activation-runner.mjs',
   'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_ACTIVATION_RUNNER_HANDOFF.md',
   'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_CONTRACT_MATRIX.md',
-  'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_OPERATOR_GUIDE.md'
+  'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_OPERATOR_GUIDE.md',
+  'docs/v1-activation-runner/CAPSULE_LAUNCHER_V1_SCOPE_APPROVAL.md'
 ];
 
 export const V1_ACTIVATION_RUNNER_WRITABLE_FILES = [
@@ -728,13 +729,15 @@ function normalizeDoctorStatus(status) {
 }
 
 export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(), options = {}) {
-  const validationReport = options.validationReport ?? validateV1ActivationPack(pack);
+  const validationReport = validateV1ActivationPack(pack);
   const publicRefs = buildPublicPackRefs(pack, validationReport);
-  const doctorReport = options.doctorReport ?? { status: 'not_run', checks: [], blockedReasonCodes: ['doctor_not_run'], publicSafe: true };
+  const overrideIssues = validateDoctorReportOverride(options.doctorReport);
+  if (overrideIssues.length) throw new ActivationRunnerWriteBlockedError(overrideIssues.map((issue) => `blocked_doctor_report_override:${issue}`));
+  const doctorReport = runActivationDoctor({ root: options.root ?? process.cwd(), activationPack: pack });
   const doctorStatus = normalizeDoctorStatus(doctorReport.status);
-  const dryRunPlan = options.dryRunPlan ?? buildDryRunActivationPlan(pack);
-  const localWorkspaceSkeleton = options.localWorkspaceSkeleton ?? buildLocalWorkspaceSkeleton(pack);
-  const consoleHandoffSummary = options.consoleHandoffSummary ?? buildConsoleHandoffSummary(pack);
+  const dryRunPlan = buildDryRunActivationPlan(pack);
+  const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
+  const consoleHandoffSummary = buildConsoleHandoffSummary(pack);
   const boundaryStatus = {
     dryRunIsNotPermission: true,
     noProviderWasCalled: true,

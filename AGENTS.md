@@ -120,6 +120,60 @@ Do not continue past that decision until Dani resolves it.
 
 ## 5. Codex build-chain rules for Capsule Launcher
 
+## Current approved v1 gate: Capsule Launcher v1 Activation Runner
+
+Dani explicitly approves this v1 gate as the current Launcher work item.
+
+This PR is allowed to implement the public-safe local Activation Runner even though the previous current focus referenced v0.6-C01.
+
+Scope allowed:
+- activation pack validation;
+- canonical public activation pack output;
+- local deterministic workspace skeleton;
+- activation doctor;
+- dry-run plan;
+- activation evidence pack;
+- future console handoff summary;
+- zero-dependency validators;
+- public-safe docs and operator guide;
+- tests and adversarial regressions.
+
+Scope not allowed:
+- Web Flagship changes;
+- Runtime changes;
+- private runtime code;
+- live execution;
+- provider calls;
+- Stripe/payment/checkout;
+- .env/secrets;
+- customer PII;
+- n8n execution;
+- booking;
+- outbound messaging;
+- provisioning;
+- deploy.
+
+Boundary:
+Runtime decides and governs.
+Launcher prepares, validates and emits public-safe evidence.
+Web renders in a separate PR.
+Dry-run is not permission.
+Public-safe summary is not authority.
+
+## Public output canonicalization rule
+
+Any Launcher output marked public-safe must be produced from canonical allowlisted fields, not raw operator-supplied objects.
+
+Rules:
+- scan object keys and values;
+- reject or canonicalize unsafe keys;
+- reject unknown public pack fields fail-closed;
+- never serialize raw activation packs;
+- never serialize raw doctor/evidence overrides;
+- never include URLs, emails, phone numbers, token-shaped strings, secret-shaped values or customer material in public outputs;
+- final public output guards must run before writing files;
+- writer correctness must survive hostile serialized objects, not only builder-created objects.
+
 ### A. Atlas-first PR scope
 
 Every PR must start from the exact Atlas entry.
@@ -218,8 +272,26 @@ Every Codex final response must include:
 Current focus:
 
 ```text
-v0.6-C01
-docs(launcher): define Capsule Launcher public repo strategy
+v1.0-LAUNCHER-ACTIVATION-RUNNER
+feat(activation): add Capsule Launcher v1 Activation Runner
 ```
 
-Goal: define the public repository strategy before quickstart, public templates, installer or download work.
+Approved working Atlas entry:
+
+```text
+Capsule Launcher v1 Activation Runner:
+Launcher prepares, validates, diagnoses and emits local public-safe evidence for a future Capsule activation handoff.
+
+Bridge:
+Console private preview / Activation Pack
+-> Launcher local
+-> Doctor
+-> Dry-run
+-> Evidence Pack
+-> Future Console/Runtime handoff.
+
+Runtime decides.
+Launcher prepares/verifies/emits public-safe evidence.
+Web remains separate.
+Dani explicitly approved this out-of-sequence v1 gate.
+```

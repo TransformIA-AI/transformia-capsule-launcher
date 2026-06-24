@@ -351,6 +351,119 @@ test('doctor report overrides cannot inject public unsafe details into writer ou
   }
 });
 
+test('invalid pack with fake validation report cannot mark evidence ready', () => {
+  const rawRef = 'https://unsafe.example/activation/fake-validation';
+  const pack = buildDefaultV1ActivationPack({ activationPackId: rawRef });
+  const evidencePack = buildActivationEvidencePack(pack, {
+    validationReport: { ok: true, status: 'valid_public_safe_activation_pack', blockers: [], warnings: [], publicSafe: true }
+  });
+
+  assert.equal(evidencePack.validationReport.ok, false);
+  assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+  assert.equal(evidencePack.dryRunStatus, 'dry_run_blocked_invalid_pack');
+  assert.equal(evidencePack.consoleHandoffSummary.launcherStatus, 'activation_blocked');
+  assertNoRawMaterial([evidencePack], [rawRef]);
+});
+
+test('invalid pack with fake passed doctor report cannot mark evidence ready', () => {
+  const rawRef = 'https://unsafe.example/activation/fake-doctor';
+  const pack = buildDefaultV1ActivationPack({ workspaceRef: rawRef });
+  const evidencePack = buildActivationEvidencePack(pack, {
+    doctorReport: {
+      doctorReportId: 'doctor_report_fake_passed',
+      status: 'passed',
+      checks: [],
+      blockedReasonCodes: [],
+      generatedAt: '2026-06-24T00:00:00.000Z',
+      publicSafe: true
+    }
+  });
+
+  assert.equal(evidencePack.validationReport.ok, false);
+  assert.equal(evidencePack.doctorStatus, 'blocked');
+  assert.equal(evidencePack.launcherStatusSummary.doctorStatus, 'blocked');
+  assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+  assertNoRawMaterial([evidencePack], [rawRef, 'doctor_report_fake_passed']);
+});
+
+test('invalid pack with fake ready dry-run plan cannot propagate ready status', () => {
+  const rawRef = 'https://unsafe.example/activation/fake-dry-run';
+  const pack = buildDefaultV1ActivationPack({ tenantDraftId: rawRef });
+  const evidencePack = buildActivationEvidencePack(pack, {
+    dryRunPlan: {
+      dryRunPlanId: 'dry_run_plan_fake_ready',
+      activationPackId: 'activation_pack_v1_public_fixture',
+      status: 'dry_run_ready_no_live_execution',
+      steps: [],
+      publicSafe: true
+    }
+  });
+
+  assert.equal(evidencePack.validationReport.ok, false);
+  assert.equal(evidencePack.dryRunStatus, 'dry_run_blocked_invalid_pack');
+  assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+  assertNoRawMaterial([evidencePack], [rawRef, 'dry_run_plan_fake_ready']);
+});
+
+test('invalid pack with fake console handoff cannot propagate prepared launcher status', () => {
+  const rawRef = 'https://unsafe.example/activation/fake-handoff';
+  const pack = buildDefaultV1ActivationPack({ organizationRef: rawRef });
+  const evidencePack = buildActivationEvidencePack(pack, {
+    consoleHandoffSummary: {
+      launcherStatus: 'activation_prepared_for_review',
+      activationReadiness: 'dry_run_ready_no_live_execution',
+      evidencePackReady: true,
+      localWorkspacePrepared: true,
+      publicReasonCodes: ['activation_pack_valid'],
+      publicSafe: true
+    }
+  });
+
+  assert.equal(evidencePack.validationReport.ok, false);
+  assert.equal(evidencePack.consoleHandoffSummary.launcherStatus, 'activation_blocked');
+  assert.equal(evidencePack.launcherStatusSummary.launcherStatus, 'activation_blocked');
+  assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+  assertNoRawMaterial([evidencePack], [rawRef]);
+});
+
+test('invalid pack with fake workspace skeleton cannot propagate prepared workspace', () => {
+  const rawRef = 'https://unsafe.example/activation/fake-skeleton';
+  const pack = buildDefaultV1ActivationPack({ workspaceRef: rawRef });
+  const evidencePack = buildActivationEvidencePack(pack, {
+    localWorkspaceSkeleton: {
+      localWorkspaceId: 'local_workspace_fake_prepared',
+      activationPackId: 'activation_pack_v1_public_fixture',
+      status: 'workspace_skeleton_prepared',
+      publicSafe: true
+    }
+  });
+
+  assert.equal(evidencePack.validationReport.ok, false);
+  assert.equal(evidencePack.launcherStatusSummary.localWorkspacePrepared, false);
+  assert.equal(evidencePack.launcherStatusSummary.evidencePackReady, false);
+  assertNoRawMaterial([evidencePack], [rawRef, 'local_workspace_fake_prepared']);
+});
+
+test('unsafe doctor report overrides cannot inject public evidence details', () => {
+  const rawEmail = ['person', 'example.invalid'].join('@');
+  const overrideCases = [
+    { [['provider', 'Url'].join('')]: 'https://provider.example' },
+    { [['customer', 'Email'].join('')]: `[${rawEmail}](mailto:${rawEmail})` },
+    { [['access', 'Token'].join('')]: 'abc12345678' }
+  ];
+
+  for (const details of overrideCases) {
+    assert.throws(() => buildActivationEvidencePack(capsuleV1ActivationPackFixture, {
+      doctorReport: {
+        status: 'passed',
+        checks: [{ checkId: 'provider_health', status: 'passed', details }],
+        blockedReasonCodes: [],
+        publicSafe: true
+      }
+    }), ActivationRunnerWriteBlockedError);
+  }
+});
+
 test('public output guard blocks malicious internal objects', () => {
   const rawEmail = ['guard', 'example.invalid'].join('@');
   const unsafeIssues = collectUnsafePublicMaterial({ details: { [`[${rawEmail}](mailto:${rawEmail})`]: 'ok' } });
