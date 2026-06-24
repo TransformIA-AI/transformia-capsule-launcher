@@ -86,7 +86,7 @@ for (const phrase of [
   'noCalendarBooking',
   'runtimeAuthorityRequired',
   'provider_commissioning_required',
-  'dad_'
+  "buildSafeDerivedId('dad'"
 ]) {
   if (!source.includes(phrase)) fail(`runner source missing required safety token: ${phrase}`);
 }
@@ -278,6 +278,34 @@ try {
 } catch (error) {
   if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`writer must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
   if (/abc12345678/.test(error.message)) fail('writer leaked raw secret-like fixture value');
+}
+
+const unsafePublicRef = 'https://unsafe.example/activation/raw-id';
+const unsafePublicRefPack = buildDefaultV1ActivationPack({
+  activationPackId: unsafePublicRef,
+  workspaceRef: unsafePublicRef,
+  tenantDraftId: unsafePublicRef,
+  organizationRef: unsafePublicRef
+});
+const unsafePublicRefOutputs = [
+  runActivationDoctor({ root, activationPack: unsafePublicRefPack }),
+  buildDryRunActivationPlan(unsafePublicRefPack),
+  buildLocalWorkspaceSkeleton(unsafePublicRefPack),
+  buildActivationEvidencePack(unsafePublicRefPack),
+  buildConsoleHandoffSummary(unsafePublicRefPack)
+];
+for (const output of unsafePublicRefOutputs) {
+  if (JSON.stringify(output).includes(unsafePublicRef)) fail('unsafe activation ref leaked into public output');
+}
+
+const liveSnakeKey = ['live', '_', 'execution', '_', 'enabled'].join('');
+const bookingSnakeKey = ['booking', '_', 'created'].join('');
+const providerEndpointKey = ['provider', '_', 'endpoint'].join('');
+for (const [key, value] of [[liveSnakeKey, true], [bookingSnakeKey, true], [providerEndpointKey, 'provider_placeholder']]) {
+  const report = validateV1ActivationPack(buildDefaultV1ActivationPack({ nestedLiveSurface: [{ [key]: value }] }));
+  if (report.ok || !report.blockers.includes(`blocked_assertive_live_field:root.nestedLiveSurface.0.${key}`)) {
+    fail(`normalized live/assertive key fixture did not fail: ${key}`);
+  }
 }
 
 const missingBoundaryReport = validateV1ActivationPack(buildDefaultV1ActivationPack({ boundaries: { noLiveExecution: false } }));

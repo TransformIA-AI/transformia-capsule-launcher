@@ -102,6 +102,74 @@ test('sensitive activation pack key names fail at any nesting level without leak
   }
 });
 
+test('unsafe activation refs do not leak through public output ids', () => {
+  const rawUnsafeRef = 'https://unsafe.example/activation/raw-id';
+  const pack = buildDefaultV1ActivationPack({
+    activationPackId: rawUnsafeRef,
+    workspaceRef: rawUnsafeRef,
+    tenantDraftId: rawUnsafeRef,
+    organizationRef: rawUnsafeRef
+  });
+  const doctorReport = runActivationDoctor({ root: process.cwd(), activationPack: pack });
+  const dryRunPlan = buildDryRunActivationPlan(pack);
+  const workspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
+  const evidencePack = buildActivationEvidencePack(pack, { doctorReport, dryRunPlan, localWorkspaceSkeleton: workspaceSkeleton });
+  const consoleHandoff = buildConsoleHandoffSummary(pack);
+
+  assert.equal(doctorReport.doctorReportId, 'doctor_report_invalid_activation_pack');
+  assert.equal(dryRunPlan.dryRunPlanId, 'dry_run_plan_invalid_activation_pack');
+  assert.equal(dryRunPlan.activationPackId, 'invalid_activation_pack');
+  assert.equal(workspaceSkeleton.localWorkspaceId, 'local_workspace_invalid_workspace');
+  assert.equal(workspaceSkeleton.activationPackId, 'invalid_activation_pack');
+  assert.equal(evidencePack.activationEvidencePackId, 'activation_evidence_pack_invalid_activation_pack');
+  assert.equal(evidencePack.activationPackId, 'invalid_activation_pack');
+  assert.equal(evidencePack.deterministicActionDossier.dadRef, 'dad_invalid_activation_pack');
+  assert.equal(consoleHandoff.lastDryRunSummary.dryRunPlanId, 'dry_run_plan_invalid_activation_pack');
+
+  for (const output of [doctorReport, dryRunPlan, workspaceSkeleton, evidencePack, consoleHandoff]) {
+    assert.doesNotMatch(JSON.stringify(output), new RegExp(rawUnsafeRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('normalized live and assertive key names fail before writer serialization', () => {
+  const mailValue = `[${['person', 'example.invalid'].join('@')}](mailto:${['person', 'example.invalid'].join('@')})`;
+  const keyCases = [
+    { key: ['live', '_', 'execution', '_', 'enabled'].join(''), value: true },
+    { key: ['LIVE', '_', 'EXECUTION', '_', 'ENABLED'].join(''), value: true },
+    { key: ['booking', '_', 'created'].join(''), value: true },
+    { key: ['payment', '_', 'captured'].join(''), value: true },
+    { key: ['runtime', '_', 'execution', '_', 'enabled'].join(''), value: true },
+    { key: ['message', '_', 'sent'].join(''), value: true },
+    { key: ['Payment', '-', 'Captured'].join(''), value: true },
+    { key: ['provider', '_', 'endpoint'].join(''), value: 'provider_placeholder' },
+    { key: ['checkout', '_', 'url'].join(''), value: 'checkout_placeholder' },
+    { key: ['customer', '_', 'email'].join(''), value: mailValue },
+    { key: ['CUSTOMER', '_', 'EMAIL'].join(''), value: mailValue }
+  ];
+
+  for (const { key, value } of keyCases) {
+    const pack = buildDefaultV1ActivationPack({
+      nestedLiveSurface: {
+        reviewItems: [{ [key]: value }]
+      }
+    });
+    const report = validateV1ActivationPack(pack);
+    const expectedBlocker = `blocked_assertive_live_field:root.nestedLiveSurface.reviewItems.0.${key}`;
+    assert.equal(report.ok, false, key);
+    assert.ok(report.blockers.includes(expectedBlocker), key);
+    assert.throws(() => buildActivationRunnerWritableFiles(pack), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, new RegExp(expectedBlocker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      assert.doesNotMatch(error.message, /provider_placeholder|checkout_placeholder|person/);
+      return true;
+    });
+  }
+
+  assert.equal(validateV1ActivationPack(buildDefaultV1ActivationPack({
+    nestedLiveSurface: { reviewItems: [{ live_execution_enabled: false }] }
+  })).ok, true);
+});
+
 test('missing no-live boundary fails validation', () => {
   const pack = buildDefaultV1ActivationPack({ boundaries: { noLiveExecution: false } });
   const report = validateV1ActivationPack(pack);

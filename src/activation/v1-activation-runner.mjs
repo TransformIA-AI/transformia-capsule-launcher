@@ -80,13 +80,7 @@ const SECRET_VALUE_PATTERN = new RegExp(
   ].join('|'),
   'i'
 );
-const FORBIDDEN_ASSERTIVE_KEYS = new Set([
-  'providerEndpoint',
-  'providerUrl',
-  'checkoutUrl',
-  'paymentIntent',
-  'customerEmail',
-  'customerPhone',
+const LIVE_ASSERTIVE_KEYS = new Set([
   'runtimeExecutionEnabled',
   'liveExecutionEnabled',
   'bookingCreated',
@@ -94,6 +88,14 @@ const FORBIDDEN_ASSERTIVE_KEYS = new Set([
   'paymentCaptured',
   'provisioned',
   'deployed'
+]);
+const NONEMPTY_ASSERTIVE_KEYS = new Set([
+  'providerEndpoint',
+  'providerUrl',
+  'checkoutUrl',
+  'paymentIntent',
+  'customerEmail',
+  'customerPhone'
 ]);
 const SENSITIVE_KEY_NAMES = new Set([
   ['api', 'key'],
@@ -150,6 +152,34 @@ function normalizeKeyName(key) {
   return String(key ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
 
+const NORMALIZED_LIVE_ASSERTIVE_KEYS = new Set([...LIVE_ASSERTIVE_KEYS].map(normalizeKeyName));
+const NORMALIZED_NONEMPTY_ASSERTIVE_KEYS = new Set([...NONEMPTY_ASSERTIVE_KEYS].map(normalizeKeyName));
+
+function safeRefOrInvalid(value, fallback) {
+  return typeof value === 'string' && SAFE_REF.test(value) ? value : fallback;
+}
+
+function buildSafeDerivedId(prefix, value, fallback) {
+  return `${prefix}_${safeRefOrInvalid(value, fallback)}`;
+}
+
+function buildPublicPackRefs(pack, validationReport = validateV1ActivationPack(pack)) {
+  const useRawRefs = validationReport.ok === true;
+  return {
+    activationPackId: useRawRefs ? safeRefOrInvalid(pack?.activationPackId, 'invalid_activation_pack') : 'invalid_activation_pack',
+    workspaceRef: useRawRefs ? safeRefOrInvalid(pack?.workspaceRef, 'invalid_workspace') : 'invalid_workspace',
+    tenantDraftId: useRawRefs ? safeRefOrInvalid(pack?.tenantDraftId, 'invalid_tenant_draft') : 'invalid_tenant_draft',
+    organizationRef: useRawRefs ? safeRefOrInvalid(pack?.organizationRef, 'invalid_organization') : 'invalid_organization'
+  };
+}
+
+function hasNonEmptyPublicValue(value) {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.keys(value).length > 0;
+  return Boolean(value);
+}
+
 function validateSafeRef(issues, path, value) {
   if (typeof value !== 'string' || !SAFE_REF.test(value)) addIssue(issues, `invalid_safe_ref:${path}`);
 }
@@ -196,7 +226,9 @@ function collectForbiddenAssertiveKeys(value, path = 'root', issues = []) {
   }
   if (!value || typeof value !== 'object') return issues;
   for (const [key, entry] of Object.entries(value)) {
-    if (FORBIDDEN_ASSERTIVE_KEYS.has(key) && entry) addIssue(issues, `blocked_assertive_live_field:${path}.${key}`);
+    const normalizedKey = normalizeKeyName(key);
+    if (NORMALIZED_LIVE_ASSERTIVE_KEYS.has(normalizedKey) && entry) addIssue(issues, `blocked_assertive_live_field:${path}.${key}`);
+    if (NORMALIZED_NONEMPTY_ASSERTIVE_KEYS.has(normalizedKey) && hasNonEmptyPublicValue(entry)) addIssue(issues, `blocked_assertive_live_field:${path}.${key}`);
     collectForbiddenAssertiveKeys(entry, `${path}.${key}`, issues);
   }
   return issues;
@@ -326,9 +358,10 @@ export function computeActivationPackFingerprint(pack = buildDefaultV1Activation
 
 export function buildLocalWorkspaceSkeleton(pack = buildDefaultV1ActivationPack()) {
   const validationReport = validateV1ActivationPack(pack);
+  const publicRefs = buildPublicPackRefs(pack, validationReport);
   return {
-    localWorkspaceId: `local_workspace_${pack.workspaceRef ?? 'invalid'}`,
-    activationPackId: pack.activationPackId,
+    localWorkspaceId: buildSafeDerivedId('local_workspace', publicRefs.workspaceRef, 'invalid_workspace'),
+    activationPackId: publicRefs.activationPackId,
     status: validationReport.ok ? 'workspace_skeleton_prepared' : 'workspace_skeleton_blocked',
     ignoredOutputRoot: V1_ACTIVATION_RUNNER_OUTPUT_ROOT,
     files: [
@@ -347,6 +380,7 @@ export function buildLocalWorkspaceSkeleton(pack = buildDefaultV1ActivationPack(
 
 export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack()) {
   const validationReport = validateV1ActivationPack(pack);
+  const publicRefs = buildPublicPackRefs(pack, validationReport);
   const validationStatus = validationReport.ok ? 'passed' : 'blocked';
   const dryRunStatus = validationReport.ok ? 'dry_run_ready_no_live_execution' : 'dry_run_blocked_invalid_pack';
   const steps = [
@@ -407,8 +441,8 @@ export function buildDryRunActivationPlan(pack = buildDefaultV1ActivationPack())
   ];
 
   return {
-    dryRunPlanId: `dry_run_plan_${pack.activationPackId ?? 'invalid'}`,
-    activationPackId: pack.activationPackId,
+    dryRunPlanId: buildSafeDerivedId('dry_run_plan', publicRefs.activationPackId, 'invalid_activation_pack'),
+    activationPackId: publicRefs.activationPackId,
     status: dryRunStatus,
     validationStatus: validationReport.status,
     steps,
@@ -477,6 +511,7 @@ export function runActivationDoctor(options = {}) {
   const pack = options.activationPack ?? buildDefaultV1ActivationPack();
   const packageJson = readPackageJson(root);
   const validationReport = validateV1ActivationPack(pack);
+  const publicRefs = buildPublicPackRefs(pack, validationReport);
   const dryRunPlan = buildDryRunActivationPlan(pack);
   const workspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
   const generatedSurface = { validationReport, dryRunPlan, workspaceSkeleton, consoleHandoffSummary: buildConsoleHandoffSummary(pack) };
@@ -505,7 +540,7 @@ export function runActivationDoctor(options = {}) {
 
   const blocked = checks.filter((check) => check.status === 'blocked');
   return {
-    doctorReportId: `doctor_report_${pack.activationPackId ?? 'invalid'}`,
+    doctorReportId: buildSafeDerivedId('doctor_report', publicRefs.activationPackId, 'invalid_activation_pack'),
     status: blocked.length ? 'blocked' : 'passed',
     checks,
     blockedReasonCodes: blocked.flatMap((check) => check.reasonCodes),
@@ -516,6 +551,7 @@ export function runActivationDoctor(options = {}) {
 
 export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(), options = {}) {
   const validationReport = options.validationReport ?? validateV1ActivationPack(pack);
+  const publicRefs = buildPublicPackRefs(pack, validationReport);
   const doctorReport = options.doctorReport ?? { status: 'not_run', checks: [], blockedReasonCodes: ['doctor_not_run'], publicSafe: true };
   const dryRunPlan = options.dryRunPlan ?? buildDryRunActivationPlan(pack);
   const localWorkspaceSkeleton = options.localWorkspaceSkeleton ?? buildLocalWorkspaceSkeleton(pack);
@@ -532,8 +568,8 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
   };
 
   return {
-    activationEvidencePackId: `activation_evidence_pack_${pack.activationPackId ?? 'invalid'}`,
-    activationPackId: pack.activationPackId,
+    activationEvidencePackId: buildSafeDerivedId('activation_evidence_pack', publicRefs.activationPackId, 'invalid_activation_pack'),
+    activationPackId: publicRefs.activationPackId,
     activationPackFingerprint: computeActivationPackFingerprint(pack),
     doctorStatus: doctorReport.status,
     dryRunStatus: dryRunPlan.status,
@@ -562,7 +598,7 @@ export function buildActivationEvidencePack(pack = buildDefaultV1ActivationPack(
       publicReasonCodes: consoleHandoffSummary.publicReasonCodes
     },
     deterministicActionDossier: {
-      dadRef: `dad_${pack.activationPackId ?? 'invalid'}`,
+      dadRef: buildSafeDerivedId('dad', publicRefs.activationPackId, 'invalid_activation_pack'),
       status: 'public_safe_placeholder_ready',
       executionAuthority: 'runtime_required',
       noLiveExecution: true,
