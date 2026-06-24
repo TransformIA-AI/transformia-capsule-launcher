@@ -173,6 +173,13 @@ function buildPublicPackRefs(pack, validationReport = validateV1ActivationPack(p
   };
 }
 
+function buildPublicBoundaryStatus(pack) {
+  return Object.fromEntries(REQUIRED_TRUE_FLAGS.map((flag) => [
+    flag,
+    pack?.boundaries?.[flag] === true && pack?.safetyFlags?.[flag] === true
+  ]));
+}
+
 function hasNonEmptyPublicValue(value) {
   if (typeof value === 'string') return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
@@ -372,7 +379,7 @@ export function buildLocalWorkspaceSkeleton(pack = buildDefaultV1ActivationPack(
       { path: 'workspace/evidence/activation-evidence-pack.public.json', purpose: 'Public-safe activation evidence pack.', publicSafe: true, containsSecrets: false },
       { path: 'workspace/handoff/console-handoff-summary.public.json', purpose: 'Future console handoff summary.', publicSafe: true, containsSecrets: false }
     ],
-    boundaries: pack.boundaries,
+    boundaries: buildPublicBoundaryStatus(pack),
     generatedAt: V1_ACTIVATION_RUNNER_GENERATED_AT,
     publicSafe: true
   };

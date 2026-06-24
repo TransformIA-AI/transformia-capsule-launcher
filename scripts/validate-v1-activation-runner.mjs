@@ -298,6 +298,32 @@ for (const output of unsafePublicRefOutputs) {
   if (JSON.stringify(output).includes(unsafePublicRef)) fail('unsafe activation ref leaked into public output');
 }
 
+const hostileBoundaryUrl = ['ht', 'tps://unsafe.example/boundary-support'].join('');
+const hostileBoundaryValue = 'abc12345678';
+const hostileBoundaryEmail = ['person', 'example.invalid'].join('@');
+const hostileBoundaryKey = ['api', '_', 'key'].join('');
+const hostileBoundaryPack = buildDefaultV1ActivationPack({
+  boundaries: {
+    supportUrl: hostileBoundaryUrl,
+    [hostileBoundaryKey]: hostileBoundaryValue,
+    customerEmail: `[${hostileBoundaryEmail}](mailto:${hostileBoundaryEmail})`
+  }
+});
+const hostileBoundarySkeleton = buildLocalWorkspaceSkeleton(hostileBoundaryPack);
+const hostileBoundaryEvidence = buildActivationEvidencePack(hostileBoundaryPack);
+const hostileBoundaryHandoff = buildConsoleHandoffSummary(hostileBoundaryPack);
+for (const output of [hostileBoundarySkeleton, hostileBoundaryEvidence, hostileBoundaryHandoff]) {
+  const text = JSON.stringify(output);
+  for (const raw of [hostileBoundaryUrl, hostileBoundaryValue, hostileBoundaryEmail]) {
+    if (text.includes(raw)) fail('hostile boundary payload leaked into public output');
+  }
+}
+for (const [key, value] of Object.entries(hostileBoundarySkeleton.boundaries ?? {})) {
+  if (!['noLiveExecution', 'noProviderConnection', 'noSecrets', 'noPaymentCapture', 'noOutboundMessaging', 'noCalendarBooking', 'noProvisioning', 'runtimeAuthorityRequired', 'dryRunIsNotPermission', 'publicSafe'].includes(key) || typeof value !== 'boolean') {
+    fail(`public boundary skeleton emitted unexpected key/value: ${key}`);
+  }
+}
+
 const liveSnakeKey = ['live', '_', 'execution', '_', 'enabled'].join('');
 const bookingSnakeKey = ['booking', '_', 'created'].join('');
 const providerEndpointKey = ['provider', '_', 'endpoint'].join('');

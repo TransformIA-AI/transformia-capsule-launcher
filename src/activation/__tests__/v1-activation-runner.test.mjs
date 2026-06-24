@@ -102,6 +102,51 @@ test('sensitive activation pack key names fail at any nesting level without leak
   }
 });
 
+test('sensitive activation pack key names fail at root, nested object, and array levels', () => {
+  const rawValue = 'token-like-value-should-not-leak';
+  const keyCases = [
+    ['api', 'Key'],
+    ['access', 'Token'],
+    ['pass', 'word'],
+    ['client', 'Secret'],
+    ['private', 'Key'],
+    ['creden', 'tial']
+  ].map((parts) => parts.join(''));
+
+  for (const keyName of keyCases) {
+    const fixtures = [
+      {
+        pack: buildDefaultV1ActivationPack({ [keyName]: rawValue }),
+        blocker: `blocked_sensitive_key_name:root.${keyName}`
+      },
+      {
+        pack: buildDefaultV1ActivationPack({ sensitiveReview: { [keyName]: rawValue } }),
+        blocker: `blocked_sensitive_key_name:root.sensitiveReview.${keyName}`
+      },
+      {
+        pack: buildDefaultV1ActivationPack({ sensitiveReview: [{ [keyName]: rawValue }] }),
+        blocker: `blocked_sensitive_key_name:root.sensitiveReview.0.${keyName}`
+      }
+    ];
+
+    for (const { pack, blocker } of fixtures) {
+      const report = validateV1ActivationPack(pack);
+      const doctorReport = runActivationDoctor({ root: process.cwd(), activationPack: pack });
+      const dryRunPlan = buildDryRunActivationPlan(pack);
+      const workspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
+      const evidencePack = buildActivationEvidencePack(pack, { doctorReport, dryRunPlan, localWorkspaceSkeleton: workspaceSkeleton });
+      const consoleHandoff = buildConsoleHandoffSummary(pack);
+
+      assert.equal(report.ok, false, blocker);
+      assert.ok(report.blockers.includes(blocker), blocker);
+      assert.throws(() => buildActivationRunnerWritableFiles(pack), ActivationRunnerWriteBlockedError);
+      for (const output of [doctorReport, dryRunPlan, workspaceSkeleton, evidencePack, consoleHandoff]) {
+        assert.doesNotMatch(JSON.stringify(output), new RegExp(rawValue));
+      }
+    }
+  }
+});
+
 test('unsafe activation refs do not leak through public output ids', () => {
   const rawUnsafeRef = 'https://unsafe.example/activation/raw-id';
   const pack = buildDefaultV1ActivationPack({
@@ -128,6 +173,47 @@ test('unsafe activation refs do not leak through public output ids', () => {
 
   for (const output of [doctorReport, dryRunPlan, workspaceSkeleton, evidencePack, consoleHandoff]) {
     assert.doesNotMatch(JSON.stringify(output), new RegExp(rawUnsafeRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('public skeleton, evidence, and handoff do not echo hostile boundary payloads', () => {
+  const rawUrl = 'https://unsafe.example/boundary-support';
+  const rawValue = 'abc12345678';
+  const rawEmail = ['person', 'example.invalid'].join('@');
+  const sensitiveKey = ['api', '_', 'key'].join('');
+  const pack = buildDefaultV1ActivationPack({
+    boundaries: {
+      supportUrl: rawUrl,
+      [sensitiveKey]: rawValue,
+      customerEmail: `[${rawEmail}](mailto:${rawEmail})`
+    }
+  });
+  const doctorReport = runActivationDoctor({ root: process.cwd(), activationPack: pack });
+  const dryRunPlan = buildDryRunActivationPlan(pack);
+  const workspaceSkeleton = buildLocalWorkspaceSkeleton(pack);
+  const evidencePack = buildActivationEvidencePack(pack, { doctorReport, dryRunPlan, localWorkspaceSkeleton: workspaceSkeleton });
+  const consoleHandoff = buildConsoleHandoffSummary(pack);
+  const canonicalBoundaryKeys = [
+    'noLiveExecution',
+    'noProviderConnection',
+    'noSecrets',
+    'noPaymentCapture',
+    'noOutboundMessaging',
+    'noCalendarBooking',
+    'noProvisioning',
+    'runtimeAuthorityRequired',
+    'dryRunIsNotPermission',
+    'publicSafe'
+  ];
+
+  assert.equal(validateV1ActivationPack(pack).ok, false);
+  assert.deepEqual(Object.keys(workspaceSkeleton.boundaries), canonicalBoundaryKeys);
+  assert.ok(Object.values(workspaceSkeleton.boundaries).every((value) => typeof value === 'boolean'));
+  for (const raw of [rawUrl, rawValue, rawEmail]) {
+    const rawPattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    for (const output of [workspaceSkeleton, evidencePack, consoleHandoff]) {
+      assert.doesNotMatch(JSON.stringify(output), rawPattern);
+    }
   }
 });
 
