@@ -18,7 +18,9 @@ import {
   collectUnsafePublicMaterial,
   computeActivationPackFingerprint,
   runActivationDoctor,
+  validateActivationRunnerWritableFileMap,
   validateV1ActivationPack,
+  writeActivationRunnerFiles,
   writeActivationRunnerEvidencePack
 } from '../src/activation/v1-activation-runner.mjs';
 
@@ -74,12 +76,14 @@ for (const exported of [
   'validateV1ActivationPack',
   'collectUnsafePublicMaterial',
   'assertPublicSafeOutput',
+  'validateActivationRunnerWritableFileMap',
   'buildCanonicalPublicV1ActivationPack',
   'buildLocalWorkspaceSkeleton',
   'runActivationDoctor',
   'buildDryRunActivationPlan',
   'buildActivationEvidencePack',
   'buildConsoleHandoffSummary',
+  'writeActivationRunnerFiles',
   'writeActivationRunnerEvidencePack',
   'writeActivationRunnerDryRun',
   'computeActivationPackFingerprint'
@@ -98,10 +102,25 @@ for (const phrase of [
   'collectUnsafePublicMaterial',
   'buildCanonicalPublicV1ActivationPack',
   'assertPublicSafeOutput',
+  'validateActivationRunnerWritableFileMap',
   'validateDoctorReportOverride',
-  'blocked_doctor_report_override'
+  'blocked_doctor_report_override',
+  'blocked_file_content'
 ]) {
   if (!source.includes(phrase)) fail(`runner source missing required safety token: ${phrase}`);
+}
+const writeActivationRunnerFilesSource = source.slice(
+  source.indexOf('export function writeActivationRunnerFiles'),
+  source.indexOf('export function writeActivationRunnerEvidencePack')
+);
+const sinkValidatorIndex = writeActivationRunnerFilesSource.indexOf('validateActivationRunnerWritableFileMap');
+const sinkMkdirIndex = writeActivationRunnerFilesSource.indexOf('mkdirSync');
+const sinkWriteIndex = writeActivationRunnerFilesSource.indexOf('writeFileSync');
+if (sinkValidatorIndex === -1 || sinkMkdirIndex === -1 || sinkWriteIndex === -1 || sinkValidatorIndex > sinkMkdirIndex || sinkValidatorIndex > sinkWriteIndex) {
+  fail('writeActivationRunnerFiles must validate the full file map before mkdirSync/writeFileSync');
+}
+if (!source.includes("buildActivationEvidencePack(canonicalPack, { root, doctorReport })")) {
+  fail('buildActivationRunnerWritableFiles must pass root into buildActivationEvidencePack');
 }
 if (source.includes("'activation-pack.public.json': publicJson(pack)") || source.includes('"activation-pack.public.json": publicJson(pack)')) {
   fail('runner writer must not serialize raw activation pack');
@@ -120,7 +139,12 @@ for (const phrase of [
   'invalid pack with fake workspace skeleton cannot propagate prepared workspace',
   'unsafe doctor report overrides cannot inject public evidence details',
   'activation pack validation scans object keys without echoing unsafe key material',
-  'unknown activation pack fields fail closed and never reach canonical public output'
+  'unknown activation pack fields fail closed and never reach canonical public output',
+  'writeActivationRunnerFiles rejects unsafe JSON string content before writing',
+  'writeActivationRunnerFiles rejects unsafe markdown content before writing',
+  'writeActivationRunnerFiles rejects JSON object key PII before writing',
+  'writeActivationRunnerFiles validates all files before writing partial output',
+  'buildActivationRunnerWritableFiles propagates requested root into evidence generation'
 ]) {
   if (!activationRunnerTestSource.includes(phrase)) fail(`activation runner tests missing adversarial case: ${phrase}`);
 }
@@ -545,6 +569,43 @@ try {
 } catch (error) {
   if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`public output guard must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
   if (error.message.includes(guardEmail)) fail('public output guard leaked raw unsafe value');
+}
+const sinkUrl = ['ht', 'tps://unsafe.example/sink'].join('');
+try {
+  validateActivationRunnerWritableFileMap({
+    'activation-pack.public.json': `${JSON.stringify({ note: sinkUrl })}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_sink_self_check');
+  fail('file-map sink validator accepted unsafe JSON content');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`file-map sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (error.message.includes(sinkUrl)) fail('file-map sink validator leaked raw unsafe URL');
+}
+const sinkOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-sink-'));
+try {
+  writeActivationRunnerFiles({
+    'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n',
+    'activation-pack.public.json': `${JSON.stringify({ note: sinkUrl })}\n`
+  }, sinkOut);
+  fail('writeActivationRunnerFiles accepted unsafe content');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`writeActivationRunnerFiles must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (error.message.includes(sinkUrl)) fail('writeActivationRunnerFiles leaked raw unsafe URL');
+  if (readdirSync(sinkOut).length !== 0) fail('writeActivationRunnerFiles wrote partial files before validation completed');
+} finally {
+  rmSync(sinkOut, { recursive: true, force: true });
+}
+const originalCwd = process.cwd();
+const nonRepoCwd = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-root-'));
+try {
+  process.chdir(nonRepoCwd);
+  const rootedFiles = buildActivationRunnerWritableFiles(validPack, { root });
+  const rootedEvidence = JSON.parse(rootedFiles['activation-evidence-pack.public.json']);
+  if (rootedEvidence.doctorStatus !== 'passed' || rootedEvidence.launcherStatusSummary?.evidencePackReady !== true) {
+    fail('buildActivationRunnerWritableFiles did not propagate root into evidence generation');
+  }
+} finally {
+  process.chdir(originalCwd);
+  rmSync(nonRepoCwd, { recursive: true, force: true });
 }
 const writableText = Object.values(writableFiles).join('\n');
 for (const pattern of secretPatterns) if (pattern.test(writableText)) fail(`writable output contains secret-shaped material: ${pattern}`);

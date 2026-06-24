@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -18,6 +18,7 @@ import {
   computeActivationPackFingerprint,
   runActivationDoctor,
   validateV1ActivationPack,
+  writeActivationRunnerFiles,
   writeActivationRunnerEvidencePack
 } from '../v1-activation-runner.mjs';
 import { capsuleV1ActivationPackFixture } from '../fixtures/capsule-v1-activation-pack.fixture.mjs';
@@ -39,6 +40,10 @@ function assertNoRawMaterial(outputs, rawValues) {
     const text = typeof output === 'string' ? output : JSON.stringify(output);
     for (const raw of rawValues) assert.doesNotMatch(text, escapedPattern(raw));
   }
+}
+
+function assertNoPartialFiles(path) {
+  assert.deepEqual(existsSync(path) ? readdirSync(path) : [], []);
 }
 
 test('valid activation pack passes public-safe validation', () => {
@@ -596,5 +601,92 @@ test('workspace skeleton and evidence writer emit deterministic public files', (
     assert.equal(evidence.launcherStatusSummary.evidencePackReady, true);
   } finally {
     cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects unsafe JSON string content before writing', () => {
+  const out = tempOutputDir();
+  const rawUrl = 'https://unsafe.example';
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'activation-pack.public.json': `${JSON.stringify({ note: rawUrl })}\n`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_file_content:writeActivationRunnerFiles:activation-pack\.public\.json/);
+      assert.doesNotMatch(error.message, escapedPattern(rawUrl));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects unsafe markdown content before writing', () => {
+  const out = tempOutputDir();
+  const rawEmail = ['person', 'example.invalid'].join('@');
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': `contact [${rawEmail}](mailto:${rawEmail})`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_file_content:writeActivationRunnerFiles:README_ACTIVATION_RUNNER\.md/);
+      assert.doesNotMatch(error.message, escapedPattern(rawEmail));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects JSON object key PII before writing', () => {
+  const out = tempOutputDir();
+  const rawEmail = ['person', 'example.invalid'].join('@');
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'activation-pack.public.json': `${JSON.stringify({ review: { [`[${rawEmail}](mailto:${rawEmail})`]: 'ok' } })}\n`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_unsafe_key_name:root\.review\.<unsafe_key>/);
+      assert.doesNotMatch(error.message, escapedPattern(rawEmail));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles validates all files before writing partial output', () => {
+  const out = tempOutputDir();
+  const rawUrl = 'https://unsafe.example';
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n',
+      'activation-pack.public.json': `${JSON.stringify({ note: rawUrl })}\n`
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.doesNotMatch(error.message, escapedPattern(rawUrl));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('buildActivationRunnerWritableFiles propagates requested root into evidence generation', () => {
+  const repoRoot = process.cwd();
+  const nonRepoCwd = tempOutputDir();
+  try {
+    process.chdir(nonRepoCwd);
+    const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: repoRoot });
+    const evidence = JSON.parse(files['activation-evidence-pack.public.json']);
+    assert.equal(evidence.doctorStatus, 'passed');
+    assert.equal(evidence.launcherStatusSummary.evidencePackReady, true);
+  } finally {
+    process.chdir(repoRoot);
+    cleanup(nonRepoCwd);
   }
 });

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export const V1_ACTIVATION_RUNNER_GENERATED_AT = '2026-06-24T00:00:00.000Z';
 export const V1_ACTIVATION_RUNNER_OUTPUT_ROOT = '.capsule-local/v1-activation-runner';
@@ -844,6 +844,75 @@ function assertInside(root, target) {
   }
 }
 
+function safeWritableFileLabel(filename, allowedFiles) {
+  return typeof filename === 'string' && allowedFiles.has(filename) ? filename : '<unexpected_file>';
+}
+
+export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1_ACTIVATION_RUNNER_WRITABLE_FILES, context = 'activation_runner_files', outputRoot = undefined) {
+  const expected = allowedFiles instanceof Set ? allowedFiles : new Set(allowedFiles);
+  if (!files || typeof files !== 'object' || Array.isArray(files)) {
+    throw new ActivationRunnerWriteBlockedError([`blocked_file_map:${context}:invalid_file_map`]);
+  }
+
+  const issues = [];
+  const root = outputRoot ? resolve(outputRoot) : undefined;
+  for (const [filename, content] of Object.entries(files)) {
+    const label = safeWritableFileLabel(filename, expected);
+    const invalidFilename = typeof filename !== 'string'
+      || !expected.has(filename)
+      || filename.includes('..')
+      || isAbsolute(filename);
+    if (invalidFilename) {
+      issues.push(`blocked_file_map:${context}:${label}:unexpected_filename`);
+      continue;
+    }
+
+    if (root) {
+      const target = resolve(join(root, filename));
+      const rel = relative(root, target);
+      if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`) || resolve(target) !== target) {
+        issues.push(`blocked_file_map:${context}:${label}:path_traversal`);
+        continue;
+      }
+    }
+
+    if (typeof content !== 'string') {
+      issues.push(`blocked_file_map:${context}:${label}:content_must_be_string`);
+      continue;
+    }
+
+    if (filename.endsWith('.json')) {
+      let parsed;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        issues.push(`blocked_file_map:${context}:${label}:invalid_json`);
+        continue;
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        issues.push(`blocked_file_map:${context}:${label}:json_root_must_be_object`);
+        continue;
+      }
+      issues.push(...collectUnsafePublicMaterial(parsed, 'root', [], {
+        allowedKeys: CANONICAL_PUBLIC_OUTPUT_KEYS,
+        blockUnknownKeys: true
+      }).map((issue) => `blocked_file_content:${context}:${label}:${issue}`));
+      continue;
+    }
+
+    if (filename.endsWith('.md')) {
+      issues.push(...collectUnsafePublicMaterial(content, 'root.content', [])
+        .map((issue) => `blocked_file_content:${context}:${label}:${issue}`));
+      continue;
+    }
+
+    issues.push(`blocked_file_map:${context}:${label}:unsupported_file_type`);
+  }
+
+  if (issues.length) throw new ActivationRunnerWriteBlockedError(issues);
+  return files;
+}
+
 function buildWorkspaceConfig(pack) {
   return assertPublicSafeOutput({
     activationPackId: pack.activationPackId,
@@ -876,12 +945,13 @@ export function buildActivationRunnerWritableFiles(pack = buildDefaultV1Activati
   const overrideIssues = validateDoctorReportOverride(options.doctorReport);
   if (overrideIssues.length) throw new ActivationRunnerWriteBlockedError(overrideIssues.map((issue) => `blocked_doctor_report_override:${issue}`));
   const canonicalPack = buildCanonicalPublicV1ActivationPack(pack);
-  const doctorReport = runActivationDoctor({ root: options.root ?? process.cwd(), activationPack: canonicalPack });
+  const root = options.root ?? process.cwd();
+  const doctorReport = runActivationDoctor({ root, activationPack: canonicalPack });
   if (doctorReport.status !== 'passed') throw new ActivationRunnerWriteBlockedError(doctorReport.blockedReasonCodes ?? ['doctor_blocked']);
   const dryRunPlan = buildDryRunActivationPlan(canonicalPack);
   const localWorkspaceSkeleton = buildLocalWorkspaceSkeleton(canonicalPack);
   const consoleHandoffSummary = buildConsoleHandoffSummary(canonicalPack);
-  const activationEvidencePack = buildActivationEvidencePack(canonicalPack, { validationReport, doctorReport, dryRunPlan, localWorkspaceSkeleton, consoleHandoffSummary });
+  const activationEvidencePack = buildActivationEvidencePack(canonicalPack, { root, doctorReport });
   const readme = `# Capsule Launcher v1 Activation Runner\n\nPublic-safe deterministic activation output. This output is a dry-run evidence and handoff package only. It does not call providers, create bookings, capture payment, send outbound messages, provision runtime state or grant live permission.\n\nActivation pack fingerprint: ${activationEvidencePack.activationPackFingerprint}\n`;
   const files = {
     'README_ACTIVATION_RUNNER.md': assertPublicSafeOutput(readme, 'README_ACTIVATION_RUNNER.md'),
@@ -898,11 +968,7 @@ export function buildActivationRunnerWritableFiles(pack = buildDefaultV1Activati
     'workspace/evidence/activation-evidence-pack.public.json': publicJsonOutput('workspace/evidence/activation-evidence-pack.public.json', activationEvidencePack),
     'workspace/handoff/console-handoff-summary.public.json': publicJsonOutput('workspace/handoff/console-handoff-summary.public.json', consoleHandoffSummary)
   };
-  const expected = new Set(V1_ACTIVATION_RUNNER_WRITABLE_FILES);
-  for (const filename of Object.keys(files)) {
-    if (!expected.has(filename) || filename.includes('..')) throw new Error('unexpected_activation_runner_filename');
-  }
-  return files;
+  return validateActivationRunnerWritableFileMap(files, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'buildActivationRunnerWritableFiles');
 }
 
 export function buildActivationRunnerDryRunWritableFiles(pack = buildDefaultV1ActivationPack()) {
@@ -923,6 +989,7 @@ export function buildActivationRunnerDryRunWritableFiles(pack = buildDefaultV1Ac
 export function writeActivationRunnerFiles(files, outputRoot) {
   if (!outputRoot || String(outputRoot).includes('..')) throw new Error('explicit_safe_output_root_required');
   const root = resolve(outputRoot);
+  validateActivationRunnerWritableFileMap(files, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'writeActivationRunnerFiles', root);
   const written = [];
   mkdirSync(root, { recursive: true });
   for (const [filename, content] of Object.entries(files)) {
