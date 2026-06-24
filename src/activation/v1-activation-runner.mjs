@@ -959,6 +959,24 @@ function assertExistingRealpathInside(root, target) {
   }
 }
 
+function assertNoFinalSymlinkTarget(target) {
+  if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
+    throw new Error('blocked_final_symlink_target');
+  }
+}
+
+function buildPreflightedWriteTargets(root, validatedFiles) {
+  return Object.entries(validatedFiles).map(([filename, content]) => {
+    if (filename.includes('..')) throw new Error('unexpected_activation_runner_filename');
+    const target = resolve(join(root, filename));
+    assertInside(root, target);
+    assertNoSymlinkPathSegments(root, target);
+    assertExistingRealpathInside(root, target);
+    assertNoFinalSymlinkTarget(target);
+    return { content, target };
+  });
+}
+
 function safeWritableFileLabel(filename, allowedFiles) {
   return typeof filename === 'string' && allowedFiles.has(filename) ? filename : '<unexpected_file>';
 }
@@ -1619,12 +1637,8 @@ export function writeActivationRunnerFiles(files, outputRoot) {
   const validatedFiles = validateActivationRunnerWritableFileMap(files, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'writeActivationRunnerFiles', root);
   const written = [];
   mkdirSync(root, { recursive: true });
-  for (const [filename, content] of Object.entries(validatedFiles)) {
-    if (filename.includes('..')) throw new Error('unexpected_activation_runner_filename');
-    const target = resolve(join(root, filename));
-    assertInside(root, target);
-    assertNoSymlinkPathSegments(root, target);
-    assertExistingRealpathInside(root, target);
+  const writeTargets = buildPreflightedWriteTargets(root, validatedFiles);
+  for (const { content, target } of writeTargets) {
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, content, 'utf8');
     written.push(target);

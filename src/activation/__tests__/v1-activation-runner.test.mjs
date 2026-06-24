@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -1377,6 +1377,77 @@ test('writeActivationRunnerFiles blocks preexisting symlink path segments under 
   } finally {
     cleanup(out);
     cleanup(external);
+  }
+});
+
+test('writeActivationRunnerFiles blocks final symlink targets without touching external files', () => {
+  const out = tempOutputDir();
+  const external = tempOutputDir();
+  const victim = join(external, 'victim.txt');
+  const originalVictim = 'external file must not change';
+  const link = join(out, 'README_ACTIVATION_RUNNER.md');
+  writeFileSync(victim, originalVictim, 'utf8');
+  try {
+    try {
+      symlinkSync(victim, link, 'file');
+    } catch {
+      return;
+    }
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n'
+    }, out), (error) => {
+      assert.match(error.message, /blocked_final_symlink_target/);
+      assert.doesNotMatch(error.message, escapedPattern(victim));
+      assert.doesNotMatch(error.message, escapedPattern(external));
+      return true;
+    });
+    assert.equal(readFileSync(victim, 'utf8'), originalVictim);
+  } finally {
+    cleanup(out);
+    cleanup(external);
+  }
+});
+
+test('writeActivationRunnerFiles writes no partial files when a later final target is a symlink', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  const out = tempOutputDir();
+  const external = tempOutputDir();
+  const victim = join(external, 'victim.txt');
+  const originalVictim = 'later symlink victim must not change';
+  const link = join(out, 'workspace', 'status', 'doctor-status.public.json');
+  writeFileSync(victim, originalVictim, 'utf8');
+  try {
+    mkdirSync(join(out, 'workspace', 'status'), { recursive: true });
+    symlinkSync(victim, link, 'file');
+  } catch {
+    cleanup(out);
+    cleanup(external);
+    return;
+  }
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': files['README_ACTIVATION_RUNNER.md'],
+      'workspace/status/doctor-status.public.json': files['workspace/status/doctor-status.public.json']
+    }, out), /blocked_final_symlink_target/);
+    assert.equal(existsSync(join(out, 'README_ACTIVATION_RUNNER.md')), false);
+    assert.equal(readFileSync(victim, 'utf8'), originalVictim);
+  } finally {
+    cleanup(out);
+    cleanup(external);
+  }
+});
+
+test('writeActivationRunnerFiles overwrites existing regular files inside output root', () => {
+  const out = tempOutputDir();
+  const target = join(out, 'README_ACTIVATION_RUNNER.md');
+  try {
+    writeFileSync(target, 'old public-safe content\n', 'utf8');
+    writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'new public-safe content\n'
+    }, out);
+    assert.equal(readFileSync(target, 'utf8'), 'new public-safe content\n');
+  } finally {
+    cleanup(out);
   }
 });
 

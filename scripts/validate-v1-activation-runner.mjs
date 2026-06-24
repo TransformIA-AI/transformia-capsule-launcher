@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -124,7 +124,10 @@ for (const phrase of [
   'cross_file_doctor_status_mismatch',
   'cross_file_handoff_summary_mismatch',
   'assertNoSymlinkPathSegments',
+  'assertNoFinalSymlinkTarget',
+  'buildPreflightedWriteTargets',
   'blocked_symlink_path_segment',
+  'blocked_final_symlink_target',
   'blocked_dry_run_step_claim_field',
   'collectBlockedEvidenceReadyClaimIssues',
   'evidence_ready_claim_for_blocked_activation',
@@ -216,6 +219,11 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects cross-file doctor status mismatches',
   'writeActivationRunnerFiles rejects evidence and handoff summary mismatches',
   'writeActivationRunnerFiles blocks preexisting symlink path segments under output root',
+  'writeActivationRunnerFiles blocks final symlink targets without touching external files',
+  'writeActivationRunnerFiles writes no partial files when a later final target is a symlink',
+  'writeActivationRunnerFiles overwrites existing regular files inside output root',
+  'external file must not change',
+  'later symlink victim must not change',
   'evidence readiness is blocked when doctor status is blocked for an incomplete root',
   'console handoff blocks readiness when doctor has not run',
   'console handoff blocks readiness when doctor is blocked',
@@ -244,6 +252,7 @@ for (const phrase of [
   'alias_mismatch',
   'cross_file_doctor_status_mismatch',
   'blocked_symlink_path_segment',
+  'blocked_final_symlink_target',
   'noLiveExecution: false',
   'runtimeAuthorityRequired: false',
   "providerConnection: 'enabled'",
@@ -1092,6 +1101,66 @@ try {
 } finally {
   rmSync(symlinkOut, { recursive: true, force: true });
   rmSync(symlinkTarget, { recursive: true, force: true });
+}
+const finalSymlinkOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-final-symlink-'));
+const finalSymlinkTarget = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-final-symlink-target-'));
+const finalSymlinkVictim = join(finalSymlinkTarget, 'victim.txt');
+const finalSymlinkOriginal = 'validator final symlink victim must not change';
+writeFileSync(finalSymlinkVictim, finalSymlinkOriginal, 'utf8');
+let finalSymlinkCreated = false;
+try {
+  try {
+    symlinkSync(finalSymlinkVictim, join(finalSymlinkOut, 'README_ACTIVATION_RUNNER.md'), 'file');
+    finalSymlinkCreated = true;
+  } catch {
+    finalSymlinkCreated = false;
+  }
+  if (finalSymlinkCreated) {
+    try {
+      writeActivationRunnerFiles({
+        'README_ACTIVATION_RUNNER.md': writableFiles['README_ACTIVATION_RUNNER.md']
+      }, finalSymlinkOut);
+      fail('writeActivationRunnerFiles accepted a final symlink target');
+    } catch (error) {
+      if (!/blocked_final_symlink_target/.test(error.message)) fail(`final symlink guard reported unexpected error: ${error.message}`);
+      if (error.message.includes(finalSymlinkVictim) || error.message.includes(finalSymlinkTarget)) fail('final symlink guard leaked raw external path');
+    }
+    if (readFileSync(finalSymlinkVictim, 'utf8') !== finalSymlinkOriginal) fail('final symlink guard modified external target');
+  }
+} finally {
+  rmSync(finalSymlinkOut, { recursive: true, force: true });
+  rmSync(finalSymlinkTarget, { recursive: true, force: true });
+}
+const partialSymlinkOut = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-partial-symlink-'));
+const partialSymlinkTarget = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-partial-symlink-target-'));
+const partialSymlinkVictim = join(partialSymlinkTarget, 'victim.txt');
+const partialSymlinkOriginal = 'validator partial symlink victim must not change';
+writeFileSync(partialSymlinkVictim, partialSymlinkOriginal, 'utf8');
+let partialSymlinkCreated = false;
+try {
+  try {
+    mkdirSync(join(partialSymlinkOut, 'workspace', 'status'), { recursive: true });
+    symlinkSync(partialSymlinkVictim, join(partialSymlinkOut, 'workspace', 'status', 'doctor-status.public.json'), 'file');
+    partialSymlinkCreated = true;
+  } catch {
+    partialSymlinkCreated = false;
+  }
+  if (partialSymlinkCreated) {
+    try {
+      writeActivationRunnerFiles({
+        'README_ACTIVATION_RUNNER.md': writableFiles['README_ACTIVATION_RUNNER.md'],
+        'workspace/status/doctor-status.public.json': writableFiles['workspace/status/doctor-status.public.json']
+      }, partialSymlinkOut);
+      fail('writeActivationRunnerFiles wrote before detecting a later final symlink target');
+    } catch (error) {
+      if (!/blocked_final_symlink_target/.test(error.message)) fail(`partial final symlink guard reported unexpected error: ${error.message}`);
+    }
+    if (existsSync(join(partialSymlinkOut, 'README_ACTIVATION_RUNNER.md'))) fail('writer produced partial output before final symlink preflight completed');
+    if (readFileSync(partialSymlinkVictim, 'utf8') !== partialSymlinkOriginal) fail('partial final symlink guard modified external target');
+  }
+} finally {
+  rmSync(partialSymlinkOut, { recursive: true, force: true });
+  rmSync(partialSymlinkTarget, { recursive: true, force: true });
 }
 const originalCwd = process.cwd();
 const nonRepoCwd = mkdtempSync(join(tmpdir(), 'transformia-v1-validator-root-'));
