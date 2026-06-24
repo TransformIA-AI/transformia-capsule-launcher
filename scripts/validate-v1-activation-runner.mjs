@@ -108,7 +108,14 @@ for (const phrase of [
   'validateCanonicalPublicFileObject',
   'blocked_public_file_schema',
   'DIGIT_ONLY_PHONE_VALUE_PATTERN',
+  'numberToPublicDecimalIntegerString',
   'hasPhoneLikeValue',
+  'hasNumericPhoneLikeValue',
+  'collectCanonicalPublicSemanticIssues',
+  'collectCanonicalActivationStatusSchemaIssues',
+  'blocked_dry_run_step_claim_field',
+  'invalid_boundary_value',
+  'invalid_disabled_value',
   'FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS',
   'blocked_forbidden_public_claim',
   'buildPublicOutputRootSummary',
@@ -165,6 +172,9 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects test payment prefix markdown content before writing',
   'writeActivationRunnerFiles rejects JSON object key PII before writing',
   'writeActivationRunnerFiles rejects digit-only phone values in public JSON before writing',
+  'writeActivationRunnerFiles rejects numeric phone values in public JSON before writing',
+  'writeActivationRunnerFiles rejects numeric phone values in canonical public fields',
+  'writeActivationRunnerFiles allows small numeric public counters',
   'writeActivationRunnerFiles rejects digit-only phone values in canonical evidence strings',
   'writeActivationRunnerFiles rejects digit-only phone markdown without echoing raw value',
   'writeActivationRunnerFiles still rejects plus-prefixed and separated phone values',
@@ -173,12 +183,22 @@ for (const phrase of [
   'writeActivationRunnerFiles validates all files before writing partial output',
   'writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing',
   'writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard',
+  'writeActivationRunnerFiles rejects false activation status boundary values',
+  'writeActivationRunnerFiles rejects enabled provider connection config values',
+  'writeActivationRunnerFiles rejects false console handoff boundary values',
+  'writeActivationRunnerFiles rejects false evidence boundary values',
+  'writeActivationRunnerFiles rejects dry-run plans with false no-live boundary values',
+  'writeActivationRunnerFiles rejects dry-run steps with live payment booking provider claim fields',
   'writeActivationRunnerFiles rejects forbidden operational claim JSON and markdown before writing',
   'generated negative safety values remain public-safe under forbidden claim scanning',
   'output root summary sanitizer does not echo URL-shaped values',
   'CLI summaries do not echo unsafe output roots',
   'payment was captured',
+  'rawPhoneNumber = 5551234567',
   '5551234567',
+  'noLiveExecution: false',
+  'runtimeAuthorityRequired: false',
+  "providerConnection: 'enabled'",
   'buildActivationRunnerWritableFiles propagates requested root into evidence generation'
 ]) {
   if (!activationRunnerTestSource.includes(phrase)) fail(`activation runner tests missing adversarial case: ${phrase}`);
@@ -639,6 +659,9 @@ try {
 const digitOnlyPhone = '5551234567';
 const digitOnlyPhoneIssues = collectUnsafePublicMaterial({ blockedReasonCodes: [digitOnlyPhone] });
 if (!digitOnlyPhoneIssues.includes('blocked_pii_like_value:root.blockedReasonCodes.0')) fail('public material scanner did not detect digit-only phone value');
+const numericPhone = 5551234567;
+const numericPhoneIssues = collectUnsafePublicMaterial({ blockedReasonCodes: [numericPhone] });
+if (!numericPhoneIssues.includes('blocked_pii_like_value:root.blockedReasonCodes.0')) fail('public material scanner did not detect numeric phone value');
 try {
   validateActivationRunnerWritableFileMap({
     'doctor-report.public.json': `${JSON.stringify({
@@ -676,6 +699,84 @@ try {
   if (readdirSync(digitOnlyPhoneOut).length !== 0) fail('digit-only phone writer wrote partial files before validation completed');
 } finally {
   rmSync(digitOnlyPhoneOut, { recursive: true, force: true });
+}
+try {
+  validateActivationRunnerWritableFileMap({
+    'doctor-report.public.json': `${JSON.stringify({
+      doctorReportId: 'doctor_report_public_fixture',
+      status: 'blocked',
+      checks: [],
+      blockedReasonCodes: [numericPhone],
+      generatedAt: '2026-06-24T00:00:00.000Z',
+      publicSafe: true
+    })}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_numeric_phone_self_check');
+  fail('file-map sink validator accepted numeric phone value');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`numeric phone sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('blocked_pii_like_value:root.blockedReasonCodes.0')) fail('numeric phone sink validator did not report stable blocker code');
+  if (error.message.includes(String(numericPhone))) fail('numeric phone sink validator leaked raw phone value');
+}
+const smallCounterIssues = collectUnsafePublicMaterial({ lastDryRunSummary: { stepCount: 5 }, written: 3 });
+if (smallCounterIssues.length) fail(`small public numeric counters were blocked: ${smallCounterIssues.join(',')}`);
+const semanticBoundaryCases = [
+  {
+    filename: 'workspace/status/activation-status.public.json',
+    value: { ...JSON.parse(writableFiles['workspace/status/activation-status.public.json']), noLiveExecution: false },
+    expected: 'invalid_boundary_value:root.noLiveExecution'
+  },
+  {
+    filename: 'workspace/status/activation-status.public.json',
+    value: { ...JSON.parse(writableFiles['workspace/status/activation-status.public.json']), runtimeAuthorityRequired: false },
+    expected: 'invalid_boundary_value:root.runtimeAuthorityRequired'
+  },
+  {
+    filename: 'workspace/status/activation-status.public.json',
+    value: { ...JSON.parse(writableFiles['workspace/status/activation-status.public.json']), providerCommissioningRequired: false },
+    expected: 'invalid_boundary_value:root.providerCommissioningRequired'
+  },
+  {
+    filename: 'workspace/config/launcher.config.public.json',
+    value: { ...JSON.parse(writableFiles['workspace/config/launcher.config.public.json']), providerConnection: 'enabled' },
+    expected: 'invalid_disabled_value:root.providerConnection'
+  },
+  {
+    filename: 'dry-run-plan.public.json',
+    value: { ...JSON.parse(writableFiles['dry-run-plan.public.json']), noLiveExecution: false },
+    expected: 'invalid_boundary_value:root.noLiveExecution'
+  }
+];
+const semanticDryRunStepClaim = JSON.parse(writableFiles['dry-run-plan.public.json']);
+semanticDryRunStepClaim.steps[0].paymentCaptured = false;
+semanticBoundaryCases.push({
+  filename: 'dry-run-plan.public.json',
+  value: semanticDryRunStepClaim,
+  expected: 'blocked_dry_run_step_claim_field:root.steps.0.<unsafe_key>'
+});
+const semanticHandoff = JSON.parse(writableFiles['console-handoff-summary.public.json']);
+semanticHandoff.boundaries.noPaymentWasCaptured = false;
+semanticBoundaryCases.push({
+  filename: 'console-handoff-summary.public.json',
+  value: semanticHandoff,
+  expected: 'invalid_boundary_value:root.boundaries.noPaymentWasCaptured'
+});
+const semanticEvidence = JSON.parse(writableFiles['activation-evidence-pack.public.json']);
+semanticEvidence.boundaryStatus.noPaymentWasCaptured = false;
+semanticBoundaryCases.push({
+  filename: 'activation-evidence-pack.public.json',
+  value: semanticEvidence,
+  expected: 'invalid_boundary_value:root.boundaryStatus.noPaymentWasCaptured'
+});
+for (const { filename, value, expected } of semanticBoundaryCases) {
+  try {
+    validateActivationRunnerWritableFileMap({
+      [filename]: `${JSON.stringify(value, null, 2)}\n`
+    }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_semantic_boundary_self_check');
+    fail(`file-map sink validator accepted false semantic boundary: ${filename}`);
+  } catch (error) {
+    if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`semantic boundary validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+    if (!error.message.includes(expected)) fail(`semantic boundary validator did not report expected blocker ${expected}`);
+  }
 }
 const operationalClaim = 'payment was captured';
 try {

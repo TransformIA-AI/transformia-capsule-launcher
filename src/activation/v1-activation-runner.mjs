@@ -358,6 +358,17 @@ function hasPhoneLikeValue(value) {
   return PHONE_PATTERN.test(value) || DIGIT_ONLY_PHONE_VALUE_PATTERN.test(String(value).trim());
 }
 
+function numberToPublicDecimalIntegerString(value) {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) return undefined;
+  const text = String(value);
+  return /^\d+$/.test(text) ? text : undefined;
+}
+
+function hasNumericPhoneLikeValue(value) {
+  const text = numberToPublicDecimalIntegerString(value);
+  return typeof text === 'string' && DIGIT_ONLY_PHONE_VALUE_PATTERN.test(text);
+}
+
 function validateSafeRef(issues, path, value) {
   if (typeof value !== 'string' || !SAFE_REF.test(value)) addIssue(issues, `invalid_safe_ref:${path}`);
 }
@@ -372,6 +383,10 @@ export function collectUnsafePublicMaterial(value, path = 'root', issues = [], o
     if (EMAIL_PATTERN.test(value) || hasPhoneLikeValue(value)) addIssue(issues, `blocked_pii_like_value:${path}`);
     if (SECRET_VALUE_PATTERN.test(value)) addIssue(issues, `blocked_secret_like_value:${path}`);
     if (hasForbiddenPublicClaim(value)) addIssue(issues, `blocked_forbidden_public_claim:${path}`);
+    return issues;
+  }
+  if (typeof value === 'number') {
+    if (hasNumericPhoneLikeValue(value)) addIssue(issues, `blocked_pii_like_value:${path}`);
     return issues;
   }
   if (Array.isArray(value)) {
@@ -1004,6 +1019,32 @@ function canonicalPublicSchemaForFile(filename) {
   return CANONICAL_PUBLIC_JSON_FILE_SCHEMAS.get(CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES.get(filename) ?? filename);
 }
 
+function canonicalPublicFileName(filename) {
+  return CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES.get(filename) ?? filename;
+}
+
+function requirePublicTrue(value, path, issues) {
+  if (value !== true) addIssue(issues, `invalid_boundary_value:${path}`);
+}
+
+function requirePublicDisabled(value, path, issues) {
+  if (value !== 'disabled') addIssue(issues, `invalid_disabled_value:${path}`);
+}
+
+function requireAllowedPublicValue(value, allowed, path, issues) {
+  if (!allowed.has(value)) addIssue(issues, `invalid_allowed_value:${path}`);
+}
+
+const DRY_RUN_STEP_ALLOWED_KEYS = new Set([
+  'stepId',
+  'label',
+  'status',
+  'reasonCodes',
+  'publicSafe',
+  'noLiveExecution',
+  'evidenceExpected'
+]);
+
 function collectCanonicalEvidenceSchemaIssues(parsed, issues) {
   if (!isPlainObject(parsed.validationReport)) addIssue(issues, 'evidence_validation_report_must_be_object');
   else {
@@ -1027,6 +1068,26 @@ function collectCanonicalEvidenceSchemaIssues(parsed, issues) {
   else if (parsed.deterministicActionDossier.executionAuthority !== 'runtime_required') {
     addIssue(issues, 'evidence_dad_execution_authority_invalid');
   }
+  if (isPlainObject(parsed.deterministicActionDossier)) {
+    requirePublicTrue(parsed.deterministicActionDossier.noLiveExecution, 'root.deterministicActionDossier.noLiveExecution', issues);
+    requirePublicTrue(parsed.deterministicActionDossier.publicSafe, 'root.deterministicActionDossier.publicSafe', issues);
+  }
+
+  if (!isPlainObject(parsed.boundaryStatus)) addIssue(issues, 'evidence_boundary_status_must_be_object');
+  else {
+    for (const field of [
+      'dryRunIsNotPermission',
+      'noProviderWasCalled',
+      'noBookingWasCreated',
+      'noPaymentWasCaptured',
+      'noOutboundMessageWasSent',
+      'noProvisioningWasPerformed',
+      'runtimeRemainsAuthority',
+      'noSecretsIncluded'
+    ]) {
+      requirePublicTrue(parsed.boundaryStatus[field], `root.boundaryStatus.${field}`, issues);
+    }
+  }
 
   const reasonCodes = [
     ...(Array.isArray(parsed.blockedLiveDisabledReasonCodes) ? parsed.blockedLiveDisabledReasonCodes : []),
@@ -1036,6 +1097,92 @@ function collectCanonicalEvidenceSchemaIssues(parsed, issues) {
   if (!Array.isArray(parsed.explicitBoundaries)) addIssue(issues, 'evidence_explicit_boundaries_must_be_array');
   for (const requiredCode of ['dry_run_is_not_permission', 'runtime_authority_required']) {
     if (!reasonCodes.includes(requiredCode)) addIssue(issues, `evidence_missing_boundary_reason:${requiredCode}`);
+  }
+}
+
+function collectCanonicalActivationStatusSchemaIssues(parsed, issues) {
+  requireAllowedPublicValue(parsed.status, new Set(['prepared_for_dry_run', 'blocked']), 'root.status', issues);
+  requirePublicTrue(parsed.noLiveExecution, 'root.noLiveExecution', issues);
+  requirePublicTrue(parsed.runtimeAuthorityRequired, 'root.runtimeAuthorityRequired', issues);
+  requirePublicTrue(parsed.providerCommissioningRequired, 'root.providerCommissioningRequired', issues);
+}
+
+function collectCanonicalDryRunPlanSchemaIssues(parsed, issues) {
+  requirePublicTrue(parsed.noLiveExecution, 'root.noLiveExecution', issues);
+  requirePublicTrue(parsed.providerCommissioningRequired, 'root.providerCommissioningRequired', issues);
+  requirePublicTrue(parsed.runtimeAuthorityRequired, 'root.runtimeAuthorityRequired', issues);
+  if (!Array.isArray(parsed.steps)) {
+    addIssue(issues, 'dry_run_steps_must_be_array');
+    return;
+  }
+  parsed.steps.forEach((step, index) => {
+    if (!isPlainObject(step)) {
+      addIssue(issues, `dry_run_step_must_be_object:root.steps.${index}`);
+      return;
+    }
+    for (const key of Object.keys(step)) {
+      if (!DRY_RUN_STEP_ALLOWED_KEYS.has(key)) {
+        addIssue(issues, `blocked_dry_run_step_claim_field:${safePathForKey(`root.steps.${index}`, key, isUnsafePublicKeyName(key))}`);
+      }
+    }
+    if (Object.hasOwn(step, 'publicSafe')) requirePublicTrue(step.publicSafe, `root.steps.${index}.publicSafe`, issues);
+    if (Object.hasOwn(step, 'noLiveExecution')) requirePublicTrue(step.noLiveExecution, `root.steps.${index}.noLiveExecution`, issues);
+  });
+}
+
+function collectCanonicalConsoleHandoffSchemaIssues(parsed, issues) {
+  requirePublicTrue(parsed.runtimeCommissioningRequired, 'root.runtimeCommissioningRequired', issues);
+  requirePublicTrue(parsed.providerCommissioningRequired, 'root.providerCommissioningRequired', issues);
+  if (Object.hasOwn(parsed, 'boundaries')) {
+    if (!isPlainObject(parsed.boundaries)) {
+      addIssue(issues, 'console_handoff_boundaries_must_be_object');
+      return;
+    }
+    for (const field of [
+      'dryRunIsNotPermission',
+      'runtimeRemainsAuthority',
+      'noProviderWasCalled',
+      'noBookingWasCreated',
+      'noPaymentWasCaptured',
+      'noOutboundMessageWasSent',
+      'noProvisioningWasPerformed'
+    ]) {
+      if (Object.hasOwn(parsed.boundaries, field)) requirePublicTrue(parsed.boundaries[field], `root.boundaries.${field}`, issues);
+    }
+  }
+}
+
+function collectCanonicalWorkspaceConfigSchemaIssues(parsed, issues) {
+  requireAllowedPublicValue(parsed.runtimeMode, new Set(['runtime_authority_required']), 'root.runtimeMode', issues);
+  for (const field of ['providerConnection', 'outboundMessaging', 'calendarBooking', 'paymentCapture', 'provisioning']) {
+    requirePublicDisabled(parsed[field], `root.${field}`, issues);
+  }
+}
+
+function collectCanonicalDoctorStatusSchemaIssues(parsed, issues) {
+  requireAllowedPublicValue(parsed.status, ALLOWED_DOCTOR_STATUSES, 'root.status', issues);
+}
+
+function collectCanonicalPublicSemanticIssues(filename, parsed, issues) {
+  switch (canonicalPublicFileName(filename)) {
+    case 'activation-evidence-pack.public.json':
+      collectCanonicalEvidenceSchemaIssues(parsed, issues);
+      break;
+    case 'workspace/status/activation-status.public.json':
+      collectCanonicalActivationStatusSchemaIssues(parsed, issues);
+      break;
+    case 'dry-run-plan.public.json':
+      collectCanonicalDryRunPlanSchemaIssues(parsed, issues);
+      break;
+    case 'console-handoff-summary.public.json':
+      collectCanonicalConsoleHandoffSchemaIssues(parsed, issues);
+      break;
+    case 'workspace/config/launcher.config.public.json':
+      collectCanonicalWorkspaceConfigSchemaIssues(parsed, issues);
+      break;
+    case 'workspace/status/doctor-status.public.json':
+      collectCanonicalDoctorStatusSchemaIssues(parsed, issues);
+      break;
   }
 }
 
@@ -1051,9 +1198,7 @@ function validateCanonicalPublicFileObject(filename, parsed) {
     if (!schema.allowed.has(key)) addIssue(issues, `unknown_top_level_field:${safePathForKey('root', key, isUnsafePublicKeyName(key))}`);
   }
   if (parsed.publicSafe !== true) addIssue(issues, 'public_safe_must_be_true');
-  if ((CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES.get(filename) ?? filename) === 'activation-evidence-pack.public.json') {
-    collectCanonicalEvidenceSchemaIssues(parsed, issues);
-  }
+  collectCanonicalPublicSemanticIssues(filename, parsed, issues);
   return issues;
 }
 

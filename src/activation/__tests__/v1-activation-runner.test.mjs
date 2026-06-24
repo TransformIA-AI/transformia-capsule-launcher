@@ -52,6 +52,28 @@ function publicJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function builderPublicJsonObject(filename) {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  return JSON.parse(files[filename]);
+}
+
+function assertPublicJsonWriteBlocked(filename, value, expectedPattern, rawValues = []) {
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      [filename]: publicJson(value)
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, expectedPattern);
+      for (const rawValue of rawValues) assert.doesNotMatch(error.message, escapedPattern(rawValue));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+}
+
 function runActivationCli(script, args = []) {
   const result = spawnSync(process.execPath, [script, ...args], {
     cwd: process.cwd(),
@@ -824,6 +846,68 @@ test('writeActivationRunnerFiles rejects digit-only phone values in public JSON 
   }
 });
 
+test('writeActivationRunnerFiles rejects numeric phone values in public JSON before writing', () => {
+  const rawPhoneNumber = 5551234567;
+  const out = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': 'Public-safe local activation output.\n',
+      'doctor-report.public.json': publicJson({
+        doctorReportId: 'doctor_report_public_fixture',
+        status: 'blocked',
+        checks: [],
+        blockedReasonCodes: [rawPhoneNumber],
+        generatedAt: '2026-06-24T00:00:00.000Z',
+        publicSafe: true
+      })
+    }, out), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_pii_like_value:root\.blockedReasonCodes\.0/);
+      assert.doesNotMatch(error.message, escapedPattern(String(rawPhoneNumber)));
+      return true;
+    });
+    assertNoPartialFiles(out);
+  } finally {
+    cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects numeric phone values in canonical public fields', () => {
+  const rawPhoneNumber = 5551234567;
+  const handoff = builderPublicJsonObject('console-handoff-summary.public.json');
+  handoff.lastDryRunSummary.stepCount = rawPhoneNumber;
+  assertPublicJsonWriteBlocked(
+    'console-handoff-summary.public.json',
+    handoff,
+    /blocked_pii_like_value:root\.lastDryRunSummary\.stepCount/,
+    [String(rawPhoneNumber)]
+  );
+});
+
+test('writeActivationRunnerFiles allows small numeric public counters', () => {
+  const handoff = builderPublicJsonObject('console-handoff-summary.public.json');
+  handoff.lastDryRunSummary.stepCount = 5;
+  const cliSummary = assertPublicSafeOutput({
+    command: 'capsule:activation:dry-run',
+    outputRootMode: 'custom',
+    outputRootPublicRef: 'custom_operator_output_root',
+    outputRootEchoed: false,
+    written: 3,
+    publicSafe: true
+  }, 'test-cli-summary.public.json');
+
+  const out = tempOutputDir();
+  try {
+    const written = writeActivationRunnerFiles({
+      'console-handoff-summary.public.json': publicJson(handoff)
+    }, out);
+    assert.equal(written.length, 1);
+    assert.equal(cliSummary.written, 3);
+  } finally {
+    cleanup(out);
+  }
+});
+
 test('writeActivationRunnerFiles rejects digit-only phone values in canonical evidence strings', () => {
   const rawPhone = '5551234567';
   const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
@@ -981,6 +1065,75 @@ test('writeActivationRunnerFiles writes builder-produced evidence JSON through c
       cleanup(out);
     }
   }
+});
+
+test('writeActivationRunnerFiles rejects false activation status boundary values', () => {
+  const cases = [
+    {
+      value: { ...builderPublicJsonObject('workspace/status/activation-status.public.json'), noLiveExecution: false },
+      expected: /invalid_boundary_value:root\.noLiveExecution/
+    },
+    {
+      value: { ...builderPublicJsonObject('workspace/status/activation-status.public.json'), runtimeAuthorityRequired: false },
+      expected: /invalid_boundary_value:root\.runtimeAuthorityRequired/
+    },
+    {
+      value: { ...builderPublicJsonObject('workspace/status/activation-status.public.json'), providerCommissioningRequired: false },
+      expected: /invalid_boundary_value:root\.providerCommissioningRequired/
+    }
+  ];
+
+  for (const { value, expected } of cases) {
+    assertPublicJsonWriteBlocked('workspace/status/activation-status.public.json', value, expected);
+  }
+});
+
+test('writeActivationRunnerFiles rejects enabled provider connection config values', () => {
+  const config = { ...builderPublicJsonObject('workspace/config/launcher.config.public.json'), providerConnection: 'enabled' };
+  assertPublicJsonWriteBlocked(
+    'workspace/config/launcher.config.public.json',
+    config,
+    /invalid_disabled_value:root\.providerConnection/
+  );
+});
+
+test('writeActivationRunnerFiles rejects false console handoff boundary values', () => {
+  const handoff = builderPublicJsonObject('console-handoff-summary.public.json');
+  handoff.boundaries.noPaymentWasCaptured = false;
+  assertPublicJsonWriteBlocked(
+    'console-handoff-summary.public.json',
+    handoff,
+    /invalid_boundary_value:root\.boundaries\.noPaymentWasCaptured/
+  );
+});
+
+test('writeActivationRunnerFiles rejects false evidence boundary values', () => {
+  const evidence = builderPublicJsonObject('activation-evidence-pack.public.json');
+  evidence.boundaryStatus.noPaymentWasCaptured = false;
+  assertPublicJsonWriteBlocked(
+    'activation-evidence-pack.public.json',
+    evidence,
+    /invalid_boundary_value:root\.boundaryStatus\.noPaymentWasCaptured/
+  );
+});
+
+test('writeActivationRunnerFiles rejects dry-run plans with false no-live boundary values', () => {
+  const dryRunPlan = { ...builderPublicJsonObject('dry-run-plan.public.json'), noLiveExecution: false };
+  assertPublicJsonWriteBlocked(
+    'dry-run-plan.public.json',
+    dryRunPlan,
+    /invalid_boundary_value:root\.noLiveExecution/
+  );
+});
+
+test('writeActivationRunnerFiles rejects dry-run steps with live payment booking provider claim fields', () => {
+  const dryRunPlan = builderPublicJsonObject('dry-run-plan.public.json');
+  dryRunPlan.steps[0].paymentCaptured = false;
+  assertPublicJsonWriteBlocked(
+    'dry-run-plan.public.json',
+    dryRunPlan,
+    /blocked_dry_run_step_claim_field:root\.steps\.0\.<unsafe_key>/
+  );
 });
 
 test('writeActivationRunnerFiles rejects forbidden operational claim JSON and markdown before writing', () => {
