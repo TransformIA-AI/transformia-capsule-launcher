@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -14,6 +15,7 @@ import {
   buildDefaultV1ActivationPack,
   buildDryRunActivationPlan,
   buildLocalWorkspaceSkeleton,
+  buildPublicOutputRootSummary,
   collectUnsafePublicMaterial,
   computeActivationPackFingerprint,
   runActivationDoctor,
@@ -46,8 +48,98 @@ function assertNoPartialFiles(path) {
   assert.deepEqual(existsSync(path) ? readdirSync(path) : [], []);
 }
 
+function publicJson(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function runActivationCli(script, args = []) {
+  const result = spawnSync(process.execPath, [script, ...args], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stderr, '');
+  return JSON.parse(result.stdout);
+}
+
 function testPaymentValue(prefixParts) {
   return `${prefixParts.join('_')}_${'a'.repeat(16)}`;
+}
+
+function hostileEvidenceReadyPack() {
+  return {
+    activationEvidencePackId: 'activation_evidence_pack_capsule_v1_activation_runner',
+    activationPackId: 'capsule_v1_activation_runner',
+    activationPackFingerprint: 'activation_fingerprint_placeholder',
+    doctorStatus: 'blocked',
+    dryRunStatus: 'dry_run_blocked_invalid_pack',
+    boundaryStatus: {
+      dryRunIsNotPermission: true,
+      noProviderWasCalled: true,
+      noBookingWasCreated: true,
+      noPaymentWasCaptured: true,
+      noOutboundMessageWasSent: true,
+      noProvisioningWasPerformed: true,
+      runtimeRemainsAuthority: true,
+      noSecretsIncluded: true
+    },
+    generatedArtifacts: [],
+    blockedLiveDisabledReasonCodes: ['dry_run_is_not_permission', 'runtime_authority_required'],
+    consoleHandoffSummary: {
+      launcherStatus: 'activation_blocked',
+      activationReadiness: 'blocked_invalid_activation_pack',
+      doctorStatus: 'blocked',
+      evidencePackReady: false,
+      localWorkspacePrepared: false,
+      runtimeCommissioningRequired: true,
+      providerCommissioningRequired: true,
+      lastDryRunSummary: {
+        dryRunPlanId: 'dry_run_plan_capsule_v1_activation_runner',
+        status: 'dry_run_blocked_invalid_pack',
+        stepCount: 0,
+        noLiveExecution: true
+      },
+      publicReasonCodes: ['activation_pack_validation_required'],
+      boundaries: {
+        dryRunIsNotPermission: true,
+        runtimeRemainsAuthority: true,
+        noProviderWasCalled: true,
+        noBookingWasCreated: true,
+        noPaymentWasCaptured: true,
+        noOutboundMessageWasSent: true,
+        noProvisioningWasPerformed: true
+      },
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      publicSafe: true
+    },
+    launcherStatusSummary: {
+      launcherStatus: 'activation_prepared_for_review',
+      activationReadiness: 'dry_run_ready_no_live_execution',
+      doctorStatus: 'blocked',
+      evidencePackReady: true,
+      localWorkspacePrepared: true,
+      runtimeCommissioningRequired: true,
+      providerCommissioningRequired: true,
+      publicReasonCodes: ['dry_run_ready_no_live_execution']
+    },
+    deterministicActionDossier: {
+      dadRef: 'dad_capsule_v1_activation_runner',
+      status: 'public_safe_placeholder_ready',
+      executionAuthority: 'runtime_required',
+      noLiveExecution: true,
+      publicSafe: true
+    },
+    explicitBoundaries: ['dry_run_is_not_permission'],
+    validationReport: {
+      ok: false,
+      status: 'blocked_invalid_activation_pack',
+      blockers: ['invalid_safe_ref:activationPackId'],
+      checkedInvariants: [],
+      publicSafe: true
+    },
+    generatedAt: '2026-01-01T00:00:00.000Z',
+    publicSafe: true
+  };
 }
 
 test('valid activation pack passes public-safe validation', () => {
@@ -739,6 +831,127 @@ test('writeActivationRunnerFiles validates all files before writing partial outp
     assertNoPartialFiles(out);
   } finally {
     cleanup(out);
+  }
+});
+
+test('writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing', () => {
+  for (const filename of [
+    'activation-evidence-pack.public.json',
+    'workspace/evidence/activation-evidence-pack.public.json'
+  ]) {
+    const out = tempOutputDir();
+    try {
+      assert.throws(() => writeActivationRunnerFiles({
+        [filename]: publicJson(hostileEvidenceReadyPack())
+      }, out), (error) => {
+        assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+        assert.match(error.message, /blocked_public_file_schema:writeActivationRunnerFiles/);
+        assert.match(error.message, /evidence_pack_ready_mismatch/);
+        return true;
+      });
+      assertNoPartialFiles(out);
+    } finally {
+      cleanup(out);
+    }
+  }
+});
+
+test('writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard', () => {
+  const files = buildActivationRunnerWritableFiles(capsuleV1ActivationPackFixture, { root: process.cwd() });
+  for (const filename of [
+    'activation-evidence-pack.public.json',
+    'workspace/evidence/activation-evidence-pack.public.json'
+  ]) {
+    const out = tempOutputDir();
+    try {
+      const written = writeActivationRunnerFiles({ [filename]: files[filename] }, out);
+      assert.equal(written.length, 1);
+      const parsed = JSON.parse(readFileSync(join(out, filename), 'utf8'));
+      assert.equal(parsed.publicSafe, true);
+      assert.equal(parsed.launcherStatusSummary.evidencePackReady, true);
+    } finally {
+      cleanup(out);
+    }
+  }
+});
+
+test('writeActivationRunnerFiles rejects forbidden operational claim JSON and markdown before writing', () => {
+  const claim = 'payment was captured';
+  const jsonOut = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'activation-pack.public.json': publicJson({ status: claim, publicSafe: true })
+    }, jsonOut), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_forbidden_public_claim:root\.status/);
+      assert.doesNotMatch(error.message, escapedPattern(claim));
+      return true;
+    });
+    assertNoPartialFiles(jsonOut);
+  } finally {
+    cleanup(jsonOut);
+  }
+
+  const markdownOut = tempOutputDir();
+  try {
+    assert.throws(() => writeActivationRunnerFiles({
+      'README_ACTIVATION_RUNNER.md': `Unsafe status: ${claim}.`
+    }, markdownOut), (error) => {
+      assert.ok(error instanceof ActivationRunnerWriteBlockedError);
+      assert.match(error.message, /blocked_forbidden_public_claim:root\.content/);
+      assert.doesNotMatch(error.message, escapedPattern(claim));
+      return true;
+    });
+    assertNoPartialFiles(markdownOut);
+  } finally {
+    cleanup(markdownOut);
+  }
+});
+
+test('generated negative safety values remain public-safe under forbidden claim scanning', () => {
+  const evidencePack = buildActivationEvidencePack(capsuleV1ActivationPackFixture, {
+    doctorReport: runActivationDoctor({ root: process.cwd(), activationPack: capsuleV1ActivationPackFixture })
+  });
+  const safetyMaterial = {
+    status: 'no payment was captured',
+    reasonCodes: ['dry_run_is_not_permission', 'runtime_authority_required', 'no_live_execution'],
+    noPaymentWasCaptured: evidencePack.boundaryStatus.noPaymentWasCaptured,
+    noProviderWasCalled: evidencePack.boundaryStatus.noProviderWasCalled,
+    publicSafe: true
+  };
+  assert.deepEqual(collectUnsafePublicMaterial(safetyMaterial), []);
+  assert.equal(assertPublicSafeOutput(evidencePack, 'activation-evidence-pack.public.json').publicSafe, true);
+});
+
+test('output root summary sanitizer does not echo URL-shaped values', () => {
+  const rawUrl = 'https://unsafe.example/output';
+  const summary = buildPublicOutputRootSummary(rawUrl);
+  assert.equal(summary.outputRootMode, 'custom');
+  assert.equal(summary.outputRootEchoed, false);
+  assert.equal(summary.publicSafe, true);
+  assertNoRawMaterial([summary], [rawUrl]);
+});
+
+test('CLI summaries do not echo unsafe output roots', () => {
+  const rawEmail = ['operator', 'example.invalid'].join('@');
+  const dryRunBase = tempOutputDir();
+  const dryRunOut = join(dryRunBase, rawEmail);
+  const rawToken = testPaymentValue(['sk', 'test']);
+  const evidenceBase = tempOutputDir();
+  const evidenceOut = join(evidenceBase, rawToken);
+  try {
+    const dryRunSummary = runActivationCli('scripts/capsule-activation-dry-run.mjs', ['--output', dryRunOut]);
+    assert.equal(dryRunSummary.publicSafe, true);
+    assert.equal(dryRunSummary.outputRootEchoed, false);
+    assertNoRawMaterial([dryRunSummary], [rawEmail, dryRunOut]);
+
+    const evidenceSummary = runActivationCli('scripts/capsule-activation-evidence.mjs', ['--output', evidenceOut]);
+    assert.equal(evidenceSummary.publicSafe, true);
+    assert.equal(evidenceSummary.outputRootEchoed, false);
+    assertNoRawMaterial([evidenceSummary], [rawToken, evidenceOut]);
+  } finally {
+    cleanup(dryRunBase);
+    cleanup(evidenceBase);
   }
 });
 

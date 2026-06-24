@@ -15,6 +15,7 @@ import {
   buildDefaultV1ActivationPack,
   buildDryRunActivationPlan,
   buildLocalWorkspaceSkeleton,
+  buildPublicOutputRootSummary,
   collectUnsafePublicMaterial,
   computeActivationPackFingerprint,
   runActivationDoctor,
@@ -83,6 +84,7 @@ for (const exported of [
   'buildDryRunActivationPlan',
   'buildActivationEvidencePack',
   'buildConsoleHandoffSummary',
+  'buildPublicOutputRootSummary',
   'writeActivationRunnerFiles',
   'writeActivationRunnerEvidencePack',
   'writeActivationRunnerDryRun',
@@ -103,6 +105,11 @@ for (const phrase of [
   'buildCanonicalPublicV1ActivationPack',
   'assertPublicSafeOutput',
   'validateActivationRunnerWritableFileMap',
+  'validateCanonicalPublicFileObject',
+  'blocked_public_file_schema',
+  'FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS',
+  'blocked_forbidden_public_claim',
+  'buildPublicOutputRootSummary',
   'validateDoctorReportOverride',
   'blocked_doctor_report_override',
   'blocked_file_content'
@@ -128,6 +135,16 @@ if (source.includes("'activation-pack.public.json': publicJson(pack)") || source
 if (!source.includes("'activation-pack.public.json': publicJsonOutput('activation-pack.public.json', canonicalPack)")) {
   fail('runner writer must serialize canonical activation pack through final guard');
 }
+const dryRunCliSource = exists('scripts/capsule-activation-dry-run.mjs') ? read('scripts/capsule-activation-dry-run.mjs') : '';
+const evidenceCliSource = exists('scripts/capsule-activation-evidence.mjs') ? read('scripts/capsule-activation-evidence.mjs') : '';
+for (const [label, cliSource] of [
+  ['dry-run CLI', dryRunCliSource],
+  ['evidence CLI', evidenceCliSource]
+]) {
+  if (!cliSource.includes('buildPublicOutputRootSummary(outputRoot)')) fail(`${label} must summarize outputRoot without echoing raw values`);
+  if (!cliSource.includes('assertPublicSafeOutput({')) fail(`${label} must pass JSON summary through assertPublicSafeOutput`);
+  if (/(^|\n)\s*outputRoot\s*,/.test(cliSource) || /\boutputRoot\s*:/.test(cliSource)) fail(`${label} must not print raw outputRoot in its JSON summary`);
+}
 if (source.includes('options.validationReport ??') || source.includes('options.dryRunPlan ??') || source.includes('options.localWorkspaceSkeleton ??') || source.includes('options.consoleHandoffSummary ??')) {
   fail('evidence builder must recompute validation, dry-run, skeleton and handoff surfaces instead of trusting overrides');
 }
@@ -147,6 +164,13 @@ for (const phrase of [
   'writeActivationRunnerFiles rejects JSON object key PII before writing',
   'writeActivationRunnerFiles writes no partial files when test payment prefix content is present',
   'writeActivationRunnerFiles validates all files before writing partial output',
+  'writeActivationRunnerFiles rejects hostile evidence readiness JSON for root and workspace copies before writing',
+  'writeActivationRunnerFiles writes builder-produced evidence JSON through canonical schema guard',
+  'writeActivationRunnerFiles rejects forbidden operational claim JSON and markdown before writing',
+  'generated negative safety values remain public-safe under forbidden claim scanning',
+  'output root summary sanitizer does not echo URL-shaped values',
+  'CLI summaries do not echo unsafe output roots',
+  'payment was captured',
   'buildActivationRunnerWritableFiles propagates requested root into evidence generation'
 ]) {
   if (!activationRunnerTestSource.includes(phrase)) fail(`activation runner tests missing adversarial case: ${phrase}`);
@@ -235,12 +259,23 @@ function assertNoForbiddenClaims(text, context) {
   for (const pattern of [
     /\blive execution enabled\b/i,
     /\bprovider was called\b/i,
+    /\blive provider called\b/i,
     /\bbooking was created\b/i,
+    /\bappointment booked\b/i,
     /\bpayment was captured\b/i,
+    /\bpayment captured\b/i,
+    /\bcharge captured\b/i,
+    /\bcheckout completed\b/i,
     /\boutbound message was sent\b/i,
+    /\boutbound message sent\b/i,
+    /\bmessage sent to customer\b/i,
     /\bprovisioning complete\b/i,
+    /\bprovisioning performed\b/i,
+    /\bruntime execution completed\b/i,
     /\bready for production\b/i,
+    /\bproduction ready\b/i,
     /\bproduction activation\b/i,
+    /\bproduction execution\b/i,
     /\bcustomer data\b/i,
     /\bprovider credential\b/i,
     /\bautonomous execution without governance\b/i
@@ -351,7 +386,7 @@ for (const file of changed) {
     for (const pattern of secretPatterns) if (pattern.test(text)) fail(`changed file contains secret-shaped material: ${file}`);
     for (const pattern of piiPatterns) if (pattern.test(text)) fail(`changed file contains PII-shaped material: ${file}`);
   }
-  if (!isValidatorScript) assertNoForbiddenClaims(text, file);
+  if (!file.includes('__tests__/') && !isValidatorScript) assertNoForbiddenClaims(text, file);
 }
 
 assertNoForbiddenClaims(docs, 'docs/v1-activation-runner');
@@ -587,6 +622,51 @@ try {
   if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`file-map sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
   if (error.message.includes(sinkUrl)) fail('file-map sink validator leaked raw unsafe URL');
 }
+const operationalClaim = 'payment was captured';
+try {
+  validateActivationRunnerWritableFileMap({
+    'workspace/status/activation-status.public.json': `${JSON.stringify({
+      activationPackId: 'capsule_v1_activation_runner',
+      status: operationalClaim,
+      noLiveExecution: true,
+      runtimeAuthorityRequired: true,
+      providerCommissioningRequired: true,
+      publicSafe: true
+    })}\n`
+  }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_operational_claim_self_check');
+  fail('file-map sink validator accepted forbidden operational claim');
+} catch (error) {
+  if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`operational claim sink validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+  if (!error.message.includes('blocked_forbidden_public_claim:root.status')) fail('operational claim sink validator did not report stable blocker code');
+  if (error.message.includes(operationalClaim)) fail('operational claim sink validator leaked raw claim value');
+}
+const safeNegativeClaimIssues = collectUnsafePublicMaterial({
+  status: 'no payment was captured',
+  reasonCodes: ['dry_run_is_not_permission', 'runtime_authority_required', 'no_live_execution'],
+  noPaymentWasCaptured: true,
+  publicSafe: true
+});
+if (safeNegativeClaimIssues.length) fail(`negative safety claim was blocked: ${safeNegativeClaimIssues.join(',')}`);
+const hostileEvidence = JSON.parse(writableFiles['activation-evidence-pack.public.json']);
+hostileEvidence.validationReport = { ok: false, status: 'blocked_invalid_activation_pack', blockers: ['invalid_safe_ref:activationPackId'], checkedInvariants: [], publicSafe: true };
+hostileEvidence.doctorStatus = 'blocked';
+hostileEvidence.launcherStatusSummary.evidencePackReady = true;
+for (const filename of ['activation-evidence-pack.public.json', 'workspace/evidence/activation-evidence-pack.public.json']) {
+  try {
+    validateActivationRunnerWritableFileMap({
+      [filename]: `${JSON.stringify(hostileEvidence, null, 2)}\n`
+    }, V1_ACTIVATION_RUNNER_WRITABLE_FILES, 'validator_hostile_evidence_self_check');
+    fail(`file-map sink validator accepted hostile evidence readiness JSON: ${filename}`);
+  } catch (error) {
+    if (!(error instanceof ActivationRunnerWriteBlockedError)) fail(`hostile evidence validator must throw ActivationRunnerWriteBlockedError, got ${error.name}`);
+    if (!error.message.includes('blocked_public_file_schema') || !error.message.includes('evidence_pack_ready_mismatch')) {
+      fail(`hostile evidence validator did not report canonical schema blocker: ${filename}`);
+    }
+  }
+}
+const unsafeOutputSummary = buildPublicOutputRootSummary(['ht', 'tps://unsafe.example/output'].join(''));
+if (unsafeOutputSummary.outputRootEchoed !== false || unsafeOutputSummary.outputRootMode !== 'custom') fail('output root summary did not mark custom root as non-echoed');
+if (JSON.stringify(unsafeOutputSummary).includes('unsafe.example')) fail('output root summary leaked raw URL-shaped value');
 const testPaymentValues = [
   `${['sk', 'test'].join('_')}_${'a'.repeat(16)}`,
   `${['pk', 'test'].join('_')}_${'a'.repeat(16)}`,

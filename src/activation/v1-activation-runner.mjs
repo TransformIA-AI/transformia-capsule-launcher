@@ -101,6 +101,7 @@ const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
   'checkedInvariants',
   'checks',
   'checksum',
+  'command',
   'consoleHandoffSummary',
   'containsSecrets',
   'dadRef',
@@ -116,6 +117,7 @@ const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
   'evidencePackReady',
   'executionAuthority',
   'explicitBoundaries',
+  'evidencePack',
   'files',
   'generatedArtifacts',
   'ignoredOutputRoot',
@@ -134,6 +136,9 @@ const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
   'noSecretsIncluded',
   'ok',
   'outboundMessaging',
+  'outputRootEchoed',
+  'outputRootMode',
+  'outputRootPublicRef',
   'path',
   'paymentCapture',
   'providerCommissioningRequired',
@@ -152,6 +157,7 @@ const CANONICAL_PUBLIC_OUTPUT_KEYS = new Set([
   'validationReport',
   'validationStatus',
   'warnings',
+  'written',
   'workspaceSkeleton'
 ]);
 const LIVE_ENDPOINT_PATTERN = /\b(?:https?:\/\/|wss?:\/\/|ftp:\/\/)/i;
@@ -171,6 +177,23 @@ const SECRET_VALUE_PATTERN = new RegExp(
   ].join('|'),
   'i'
 );
+const FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS = [
+  /\bpayment\s+was\s+captured\b/i,
+  /\bpayment\s+captured\b/i,
+  /\bcharge\s+captured\b/i,
+  /\bcheckout\s+completed\b/i,
+  /\bbooking\s+was\s+created\b/i,
+  /\bappointment\s+booked\b/i,
+  /\boutbound\s+message\s+sent\b/i,
+  /\bmessage\s+sent\s+to\s+customer\b/i,
+  /\bprovider\s+was\s+called\b/i,
+  /\blive\s+provider\s+called\b/i,
+  /\bprovisioning\s+performed\b/i,
+  /\bruntime\s+execution\s+completed\b/i,
+  /\blive\s+execution\s+enabled\b/i,
+  /\bproduction\s+ready\b/i,
+  /\bproduction\s+execution\b/i
+];
 const LIVE_ASSERTIVE_KEYS = new Set([
   'runtimeExecutionEnabled',
   'liveExecutionEnabled',
@@ -319,6 +342,17 @@ function isUnsafePublicKeyName(key) {
     || NORMALIZED_PUBLIC_PAYLOAD_KEY_NAMES.has(normalizedKey);
 }
 
+function hasForbiddenPublicClaim(value) {
+  const scan = String(value)
+    .replace(/\bno\s+payment\s+was\s+captured\b/gi, '')
+    .replace(/\bno\s+booking\s+was\s+created\b/gi, '')
+    .replace(/\bno\s+provider\s+was\s+called\b/gi, '')
+    .replace(/\bno\s+outbound\s+message\s+was\s+sent\b/gi, '')
+    .replace(/\bno\s+provisioning\s+was\s+performed\b/gi, '')
+    .replace(/\bno\s+live\s+execution\b/gi, '');
+  return FORBIDDEN_PUBLIC_CLAIM_VALUE_PATTERNS.some((pattern) => pattern.test(scan));
+}
+
 function validateSafeRef(issues, path, value) {
   if (typeof value !== 'string' || !SAFE_REF.test(value)) addIssue(issues, `invalid_safe_ref:${path}`);
 }
@@ -332,6 +366,7 @@ export function collectUnsafePublicMaterial(value, path = 'root', issues = [], o
     if (LIVE_ENDPOINT_PATTERN.test(value)) addIssue(issues, `blocked_live_endpoint:${path}`);
     if (EMAIL_PATTERN.test(value) || PHONE_PATTERN.test(value)) addIssue(issues, `blocked_pii_like_value:${path}`);
     if (SECRET_VALUE_PATTERN.test(value)) addIssue(issues, `blocked_secret_like_value:${path}`);
+    if (hasForbiddenPublicClaim(value)) addIssue(issues, `blocked_forbidden_public_claim:${path}`);
     return issues;
   }
   if (Array.isArray(value)) {
@@ -823,6 +858,16 @@ export function assertPublicSafeOutput(value, context = 'public_output') {
   return value;
 }
 
+export function buildPublicOutputRootSummary(outputRoot = V1_ACTIVATION_RUNNER_OUTPUT_ROOT) {
+  const outputRootMode = outputRoot === V1_ACTIVATION_RUNNER_OUTPUT_ROOT ? 'default' : 'custom';
+  return assertPublicSafeOutput({
+    outputRootMode,
+    outputRootPublicRef: outputRootMode === 'default' ? 'default_activation_runner_output_root' : 'custom_operator_output_root',
+    outputRootEchoed: false,
+    publicSafe: true
+  }, 'activation-runner-output-root-summary.public.json');
+}
+
 function validateDoctorReportOverride(doctorReport) {
   if (typeof doctorReport === 'undefined') return [];
   return collectUnsafePublicMaterial(doctorReport, 'root.doctorReport', [], {
@@ -848,6 +893,163 @@ function assertInside(root, target) {
 
 function safeWritableFileLabel(filename, allowedFiles) {
   return typeof filename === 'string' && allowedFiles.has(filename) ? filename : '<unexpected_file>';
+}
+
+function buildPublicFileSchema(fields) {
+  return { required: fields, allowed: new Set(fields) };
+}
+
+const CANONICAL_PUBLIC_JSON_FILE_SCHEMAS = new Map([
+  ['activation-pack.public.json', buildPublicFileSchema(CANONICAL_ACTIVATION_PACK_FIELDS)],
+  ['doctor-report.public.json', buildPublicFileSchema([
+    'doctorReportId',
+    'status',
+    'checks',
+    'blockedReasonCodes',
+    'generatedAt',
+    'publicSafe'
+  ])],
+  ['dry-run-plan.public.json', buildPublicFileSchema([
+    'dryRunPlanId',
+    'activationPackId',
+    'status',
+    'validationStatus',
+    'steps',
+    'noLiveExecution',
+    'providerCommissioningRequired',
+    'runtimeAuthorityRequired',
+    'generatedAt',
+    'publicSafe'
+  ])],
+  ['activation-evidence-pack.public.json', buildPublicFileSchema([
+    'activationEvidencePackId',
+    'activationPackId',
+    'activationPackFingerprint',
+    'doctorStatus',
+    'dryRunStatus',
+    'boundaryStatus',
+    'generatedArtifacts',
+    'blockedLiveDisabledReasonCodes',
+    'consoleHandoffSummary',
+    'launcherStatusSummary',
+    'deterministicActionDossier',
+    'explicitBoundaries',
+    'validationReport',
+    'generatedAt',
+    'publicSafe'
+  ])],
+  ['console-handoff-summary.public.json', buildPublicFileSchema([
+    'launcherStatus',
+    'activationReadiness',
+    'doctorStatus',
+    'evidencePackReady',
+    'localWorkspacePrepared',
+    'runtimeCommissioningRequired',
+    'providerCommissioningRequired',
+    'lastDryRunSummary',
+    'publicReasonCodes',
+    'boundaries',
+    'generatedAt',
+    'publicSafe'
+  ])],
+  ['local-workspace-skeleton.public.json', buildPublicFileSchema([
+    'localWorkspaceId',
+    'activationPackId',
+    'status',
+    'ignoredOutputRoot',
+    'files',
+    'boundaries',
+    'generatedAt',
+    'publicSafe'
+  ])],
+  ['workspace/config/launcher.config.public.json', buildPublicFileSchema([
+    'activationPackId',
+    'workspaceRef',
+    'launcherMode',
+    'runtimeMode',
+    'providerConnection',
+    'outboundMessaging',
+    'calendarBooking',
+    'paymentCapture',
+    'provisioning',
+    'publicSafe'
+  ])],
+  ['workspace/status/activation-status.public.json', buildPublicFileSchema([
+    'activationPackId',
+    'status',
+    'noLiveExecution',
+    'runtimeAuthorityRequired',
+    'providerCommissioningRequired',
+    'publicSafe'
+  ])],
+  ['workspace/status/doctor-status.public.json', buildPublicFileSchema([
+    'doctorReportId',
+    'status',
+    'publicSafe'
+  ])]
+]);
+
+const CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES = new Map([
+  ['workspace/plans/dry-run-plan.public.json', 'dry-run-plan.public.json'],
+  ['workspace/evidence/activation-evidence-pack.public.json', 'activation-evidence-pack.public.json'],
+  ['workspace/handoff/console-handoff-summary.public.json', 'console-handoff-summary.public.json']
+]);
+
+function canonicalPublicSchemaForFile(filename) {
+  return CANONICAL_PUBLIC_JSON_FILE_SCHEMAS.get(CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES.get(filename) ?? filename);
+}
+
+function collectCanonicalEvidenceSchemaIssues(parsed, issues) {
+  if (!isPlainObject(parsed.validationReport)) addIssue(issues, 'evidence_validation_report_must_be_object');
+  else {
+    if (typeof parsed.validationReport.ok !== 'boolean') addIssue(issues, 'evidence_validation_ok_must_be_boolean');
+    if (typeof parsed.validationReport.status !== 'string') addIssue(issues, 'evidence_validation_status_must_be_string');
+  }
+
+  if (!ALLOWED_DOCTOR_STATUSES.has(parsed.doctorStatus)) addIssue(issues, 'evidence_doctor_status_invalid');
+
+  if (!isPlainObject(parsed.launcherStatusSummary)) addIssue(issues, 'evidence_launcher_status_summary_must_be_object');
+  else {
+    const expectedReady = parsed.validationReport?.ok === true && parsed.doctorStatus === 'passed';
+    if (typeof parsed.launcherStatusSummary.evidencePackReady !== 'boolean') {
+      addIssue(issues, 'evidence_pack_ready_must_be_boolean');
+    } else if (parsed.launcherStatusSummary.evidencePackReady !== expectedReady) {
+      addIssue(issues, 'evidence_pack_ready_mismatch');
+    }
+  }
+
+  if (!isPlainObject(parsed.deterministicActionDossier)) addIssue(issues, 'evidence_dad_must_be_object');
+  else if (parsed.deterministicActionDossier.executionAuthority !== 'runtime_required') {
+    addIssue(issues, 'evidence_dad_execution_authority_invalid');
+  }
+
+  const reasonCodes = [
+    ...(Array.isArray(parsed.blockedLiveDisabledReasonCodes) ? parsed.blockedLiveDisabledReasonCodes : []),
+    ...(Array.isArray(parsed.explicitBoundaries) ? parsed.explicitBoundaries : [])
+  ];
+  if (!Array.isArray(parsed.blockedLiveDisabledReasonCodes)) addIssue(issues, 'evidence_blocked_reason_codes_must_be_array');
+  if (!Array.isArray(parsed.explicitBoundaries)) addIssue(issues, 'evidence_explicit_boundaries_must_be_array');
+  for (const requiredCode of ['dry_run_is_not_permission', 'runtime_authority_required']) {
+    if (!reasonCodes.includes(requiredCode)) addIssue(issues, `evidence_missing_boundary_reason:${requiredCode}`);
+  }
+}
+
+function validateCanonicalPublicFileObject(filename, parsed) {
+  const schema = canonicalPublicSchemaForFile(filename);
+  const issues = [];
+  if (!schema) return [`missing_public_json_schema:${filename}`];
+
+  for (const field of schema.required) {
+    if (!Object.hasOwn(parsed, field)) addIssue(issues, `missing_field:${field}`);
+  }
+  for (const key of Object.keys(parsed)) {
+    if (!schema.allowed.has(key)) addIssue(issues, `unknown_top_level_field:${safePathForKey('root', key, isUnsafePublicKeyName(key))}`);
+  }
+  if (parsed.publicSafe !== true) addIssue(issues, 'public_safe_must_be_true');
+  if ((CANONICAL_PUBLIC_JSON_FILE_SCHEMA_ALIASES.get(filename) ?? filename) === 'activation-evidence-pack.public.json') {
+    collectCanonicalEvidenceSchemaIssues(parsed, issues);
+  }
+  return issues;
 }
 
 export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1_ACTIVATION_RUNNER_WRITABLE_FILES, context = 'activation_runner_files', outputRoot = undefined) {
@@ -899,6 +1101,8 @@ export function validateActivationRunnerWritableFileMap(files, allowedFiles = V1
         allowedKeys: CANONICAL_PUBLIC_OUTPUT_KEYS,
         blockUnknownKeys: true
       }).map((issue) => `blocked_file_content:${context}:${label}:${issue}`));
+      issues.push(...validateCanonicalPublicFileObject(label, parsed)
+        .map((issue) => `blocked_public_file_schema:${context}:${label}:${issue}`));
       continue;
     }
 

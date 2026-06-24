@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   V1_ACTIVATION_RUNNER_OUTPUT_ROOT,
+  assertPublicSafeOutput,
   buildDefaultV1ActivationPack,
   buildDryRunActivationPlan,
+  buildPublicOutputRootSummary,
   writeActivationRunnerDryRun
 } from '../src/activation/v1-activation-runner.mjs';
 
@@ -21,10 +23,11 @@ function loadActivationPack() {
 const outputRoot = argValue('--output') ?? V1_ACTIVATION_RUNNER_OUTPUT_ROOT;
 const pack = loadActivationPack();
 const written = writeActivationRunnerDryRun(pack, outputRoot);
-console.log(JSON.stringify({
+const summary = assertPublicSafeOutput({
   command: 'capsule:activation:dry-run',
-  outputRoot,
+  ...buildPublicOutputRootSummary(outputRoot),
   written: written.length,
   dryRunPlan: buildDryRunActivationPlan(pack),
   publicSafe: true
-}, null, 2));
+}, 'capsule-activation-dry-run-summary.public.json');
+console.log(JSON.stringify(summary, null, 2));

@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   V1_ACTIVATION_RUNNER_OUTPUT_ROOT,
+  assertPublicSafeOutput,
   buildActivationEvidencePack,
   buildDefaultV1ActivationPack,
+  buildPublicOutputRootSummary,
   runActivationDoctor,
   writeActivationRunnerEvidencePack
 } from '../src/activation/v1-activation-runner.mjs';
@@ -23,10 +25,11 @@ const outputRoot = argValue('--output') ?? V1_ACTIVATION_RUNNER_OUTPUT_ROOT;
 const pack = loadActivationPack();
 const doctorReport = runActivationDoctor({ root: process.cwd(), activationPack: pack });
 const written = writeActivationRunnerEvidencePack(pack, outputRoot, { root: process.cwd(), doctorReport });
-console.log(JSON.stringify({
+const summary = assertPublicSafeOutput({
   command: 'capsule:activation:evidence',
-  outputRoot,
+  ...buildPublicOutputRootSummary(outputRoot),
   written: written.length,
-  evidencePack: buildActivationEvidencePack(pack, { doctorReport }),
+  evidencePack: buildActivationEvidencePack(pack, { root: process.cwd(), doctorReport }),
   publicSafe: true
-}, null, 2));
+}, 'capsule-activation-evidence-summary.public.json');
+console.log(JSON.stringify(summary, null, 2));
